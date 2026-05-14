@@ -1027,38 +1027,53 @@ window.saveAuthSupabaseConfig = function() {
 };
 
 window.handleLogin = async function(e) {
+window.handleLogin = async function(e) {
   e.preventDefault();
+  const email = document.getElementById('auth-email').value.trim();
+  const pass = document.getElementById('auth-pass').value.trim();
   const btn = document.getElementById('btn-login');
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Entrando...';
-  try {
-    await dbLogin(document.getElementById('auth-email').value, document.getElementById('auth-pass').value);
+
+  // Verifica primeiro na nossa base de usuários criados pelo Administrador! (Zero delay e sem validação de email)
+  const enc = USUARIOS_SISTEMA.find(u => u.email.toLowerCase() === email.toLowerCase() && u.senha === pass);
+  if (enc) {
+    userLogado = enc;
+    currentUser = { email: enc.email };
+    const sbEmail = document.getElementById('sb-user-email');
+    if(sbEmail) sbEmail.textContent = enc.email;
     document.getElementById('splash-screen').classList.remove('hidden');
-    checkAuthAndInit();
+    await loadSupabaseData();
+    hideAuth();
+    document.getElementById('splash-screen').classList.add('hidden');
+    render();
+    return;
+  }
+
+  // Fallback para nuvem Supabase
+  try {
+    const data = await dbLogin(email, pass);
+    currentUser = { email: email };
+    document.getElementById('splash-screen').classList.remove('hidden');
+    await loadSupabaseData();
+    hideAuth();
+    document.getElementById('splash-screen').classList.add('hidden');
+    render();
   } catch (err) {
-    document.getElementById('auth-error').textContent = err.message;
+    document.getElementById('auth-error').textContent = "Credenciais inválidas. Verifique seu e-mail e senha.";
     btn.disabled = false; btn.innerHTML = 'Entrar';
   }
 };
 
 window.handleRegister = async function(e) {
   e.preventDefault();
-  const btn = document.getElementById('btn-login');
-  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Registrando...';
-  try {
-    await dbSignUp(document.getElementById('auth-email').value, document.getElementById('auth-pass').value);
-    alert('Conta criada com sucesso! Você já pode fazer login.');
-    renderLoginForm();
-  } catch (err) {
-    document.getElementById('auth-error').textContent = err.message;
-    btn.disabled = false; btn.innerHTML = 'Registrar';
-  }
 };
 
 window.doLogout = async function() {
   if (!confirm("Tem certeza que deseja sair?")) return;
   document.getElementById('splash-screen').classList.remove('hidden');
-  await dbLogout();
-  window.location.reload();
+  try { await dbLogout(); } catch(e){}
+  showAuth();
+  document.getElementById('splash-screen').classList.add('hidden');
 };
 
 async function loadSupabaseData() {
@@ -1072,9 +1087,10 @@ async function loadSupabaseData() {
 async function checkAuthAndInit() {
   const splash = document.getElementById('splash-screen');
   try {
-    currentUser = await dbGetCurrentUser();
-    if (currentUser) {
-      document.getElementById('sb-user-email').textContent = currentUser.email;
+    if (userLogado) {
+      currentUser = { email: userLogado.email };
+      const sbEmail = document.getElementById('sb-user-email');
+      if(sbEmail) sbEmail.textContent = userLogado.email;
       await loadSupabaseData();
       hideAuth();
       splash.classList.add('hidden');
@@ -1084,7 +1100,6 @@ async function checkAuthAndInit() {
       showAuth();
     }
   } catch (err) {
-    console.error("Erro na inicialização:", err);
     splash.classList.add('hidden');
     showAuth();
   }
