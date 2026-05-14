@@ -1027,7 +1027,6 @@ window.saveAuthSupabaseConfig = function() {
 };
 
 window.handleLogin = async function(e) {
-window.handleLogin = async function(e) {
   e.preventDefault();
   const email = document.getElementById('auth-email').value.trim();
   const pass = document.getElementById('auth-pass').value.trim();
