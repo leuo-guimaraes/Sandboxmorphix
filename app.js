@@ -1026,6 +1026,23 @@ window.saveAuthSupabaseConfig = function() {
   saveSupabaseConfig({ url, key }); 
 };
 
+function atualizarPermissoesSidebar() {
+  const itemUsuarios = document.querySelector('.nav-item[data-page="usuarios"]');
+  if (itemUsuarios) {
+    if (userLogado && userLogado.tipo === 'admin') {
+      itemUsuarios.style.display = 'flex';
+    } else {
+      itemUsuarios.style.display = 'none';
+      if (currentPage === 'usuarios') {
+        currentPage = 'dashboard';
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        const itemDash = document.querySelector('.nav-item[data-page="dashboard"]');
+        if(itemDash) itemDash.classList.add('active');
+      }
+    }
+  }
+}
+
 window.handleLogin = async function(e) {
   e.preventDefault();
   const email = document.getElementById('auth-email').value.trim();
@@ -1033,7 +1050,6 @@ window.handleLogin = async function(e) {
   const btn = document.getElementById('btn-login');
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Entrando...';
 
-  // Verifica primeiro na nossa base de usuários criados pelo Administrador! (Zero delay e sem validação de email)
   const enc = USUARIOS_SISTEMA.find(u => u.email.toLowerCase() === email.toLowerCase() && u.senha === pass);
   if (enc) {
     userLogado = enc;
@@ -1043,18 +1059,19 @@ window.handleLogin = async function(e) {
     document.getElementById('splash-screen').classList.remove('hidden');
     await loadSupabaseData();
     hideAuth();
+    atualizarPermissoesSidebar();
     document.getElementById('splash-screen').classList.add('hidden');
     render();
     return;
   }
 
-  // Fallback para nuvem Supabase
   try {
     const data = await dbLogin(email, pass);
     currentUser = { email: email };
     document.getElementById('splash-screen').classList.remove('hidden');
     await loadSupabaseData();
     hideAuth();
+    atualizarPermissoesSidebar();
     document.getElementById('splash-screen').classList.add('hidden');
     render();
   } catch (err) {
@@ -1092,6 +1109,7 @@ async function checkAuthAndInit() {
       if(sbEmail) sbEmail.textContent = userLogado.email;
       await loadSupabaseData();
       hideAuth();
+      atualizarPermissoesSidebar();
       splash.classList.add('hidden');
       render();
     } else {
@@ -1161,7 +1179,14 @@ window.alternarUserLogado = function(id) {
     userLogado = enc;
     const sbEmail = document.getElementById('sb-user-email');
     if(sbEmail) sbEmail.innerText = enc.email;
-    renderUsuarios();
+    atualizarPermissoesSidebar();
+    if (currentPage === 'usuarios' && userLogado.tipo !== 'admin') {
+      render();
+    } else if (currentPage === 'usuarios') {
+      renderUsuarios();
+    } else {
+      render();
+    }
   }
 };
 
