@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Sandbox Morphix — Sistema de Gestão. Monitore editais, gerencie propostas e acompanhe resultados.">
+  <title>Sandbox Morphix — Gestão</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://unpkg.com/tesseract.js@v5.0.1/dist/tesseract.min.js"></script>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+<!-- SPLASH SCREEN -->
+<div id="splash-screen">
+  <div class="spinner"></div>
+  <h2 style="font-weight:700; color:var(--primary); font-size:1.5rem">Sandbox Morphix</h2>
+  <p style="color:var(--gray-500); font-size:0.85rem; margin-top:8px">Conectando ao banco de dados...</p>
+</div>
+
+<!-- AUTH CONTAINER -->
+<div id="auth-root" style="display:none"></div>
+
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo"><i class="ti ti-box"></i> Sandbox Morphix</div>
+  <nav class="sidebar-nav">
+    <div class="nav-item active" data-page="dashboard"><i class="ti ti-dashboard"></i> Dashboard</div>
+    <div class="nav-item" data-page="editais"><i class="ti ti-file-text"></i> Editais</div>
+    <div class="nav-item" data-page="analise"><i class="ti ti-brain"></i> Análise IA</div>
+    <div class="nav-item" data-page="indicacoes"><i class="ti ti-target"></i> Indicações</div>
+    <div class="nav-item" data-page="kanban"><i class="ti ti-layout-kanban"></i> Pipeline</div>
+    <div class="nav-item" data-page="agenda"><i class="ti ti-calendar"></i> Agenda</div>
+    <div class="nav-item" data-page="crm"><i class="ti ti-users"></i> CRM Clientes</div>
+    <div class="nav-item" data-page="relatorios"><i class="ti ti-chart-bar"></i> Relatórios</div>
+    <div class="nav-separator"></div>
+    <div class="nav-item" data-page="rpa"><i class="ti ti-robot"></i> RPA Airtop</div>
+    <div class="nav-item" data-page="usuarios"><i class="ti ti-user-plus"></i> Usuários</div>
+    <div class="nav-item" data-page="configia"><i class="ti ti-settings"></i> Configurações</div>
+  </nav>
+  <div class="sidebar-footer">© 2026 Sandbox Morphix v2.0</div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main" id="app"></main>
+
+<!-- MODAL CONTAINER -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script src="data.js"></script>
+<script src="supabase.js"></script>
+<script src="modules.js"></script>
+<script src="ai-engine.js"></script>
+<script src="airtop.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
