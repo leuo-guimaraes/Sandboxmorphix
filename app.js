@@ -954,10 +954,6 @@ function hideAuth() {
 }
 
 function renderLoginForm() {
-  const cfg = getSupabaseConfig();
-  const defUrl = cfg.url || SB_DEFAULTS.url;
-  const defKey = cfg.key || SB_DEFAULTS.key;
-  
   $('#auth-root').innerHTML = `
     <div class="auth-container">
       <div class="auth-card">
@@ -984,19 +980,6 @@ function renderLoginForm() {
           </div>
           <button type="submit" class="auth-btn" id="btn-login">Entrar</button>
         </form>
-        <div class="auth-links">
-          Não tem uma conta? <a onclick="renderRegisterForm()">Criar conta</a>
-        </div>
-        <div class="auth-settings">
-          <div class="auth-settings-toggle" onclick="document.getElementById('sb-cfg-panel').classList.toggle('open')">
-            <i class="ti ti-settings"></i> Configurar Conexão Supabase
-          </div>
-          <div id="sb-cfg-panel" class="auth-settings-panel">
-             <div class="form-group"><label>URL</label><input id="sb-cfg-url" value="${defUrl}"></div>
-             <div class="form-group"><label>Anon Key</label><input id="sb-cfg-key" type="password" value="${defKey}"></div>
-             <button class="btn btn-sm btn-outline" style="width:100%" onclick="saveAuthSupabaseConfig()">Salvar e Recarregar</button>
-          </div>
-        </div>
       </div>
     </div>
   `;
