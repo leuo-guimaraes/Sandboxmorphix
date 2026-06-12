@@ -40,6 +40,14 @@ let PIPELINE = [];
 let EVENTOS = [];
 let ALERTAS = [];
 let EDITAL_CLIENTES = [];
+let KANBAN_COLUNAS = [];
+const DEFAULT_KANBAN_COLUNAS = [
+  { key: 'prospeccao', label: 'Prospecção', posicao: 1 },
+  { key: 'analise', label: 'Análise Edital', posicao: 2 },
+  { key: 'proposta', label: 'Proposta em Elaboração', posicao: 3 },
+  { key: 'enviado', label: 'Enviado / Sessão', posicao: 4 },
+  { key: 'concluido', label: 'Concluído', posicao: 5 }
+];
 let RELATORIOS = {
   taxaVitoria: 0,
   editaisParticipados: 0,

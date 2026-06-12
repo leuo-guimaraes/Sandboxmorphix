@@ -226,6 +226,18 @@ async function vincularEEnviar(clienteId) {
       }
     }
   }
+
+  // Avançar edital no pipeline localmente
+  if (typeof PIPELINE !== 'undefined') {
+    const p = PIPELINE.find(x => String(x.editalId || x.edital_id) === String(editalId));
+    if (p) {
+      if (p.coluna === 'prospeccao' || p.coluna === 'analise') {
+        p.coluna = 'proposta';
+      }
+    } else {
+      PIPELINE.push({ editalId: editalId, edital_id: editalId, coluna: 'proposta', prioridade: 'media' });
+    }
+  }
   
   const subject = encodeURIComponent(`Proposta de Licitação — ${e.numero}`);
   const body = encodeURIComponent(`Olá equipe da ${c.nome},

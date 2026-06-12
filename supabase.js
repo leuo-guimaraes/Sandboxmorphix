@@ -305,6 +305,31 @@ async function dbVincularCliente(editalId, clienteId) {
   const list = getLocalFallback('edital_clientes');
   list.unshift(salvo);
   saveLocalFallback('edital_clientes', list);
+
+  // Auto progression: when linked to a client, move to 'proposta' if in 'prospeccao' or 'analise'
+  if (typeof PIPELINE !== 'undefined') {
+    const p = PIPELINE.find(x => String(x.editalId || x.edital_id) === String(editalId));
+    if (p) {
+      if (p.coluna === 'prospeccao' || p.coluna === 'analise') {
+        p.coluna = 'proposta';
+        if (typeof dbUpdatePipelineColuna === 'function' && p.id) {
+          try {
+            await dbUpdatePipelineColuna(p.id, 'proposta');
+          } catch(err) {}
+        }
+      }
+    } else {
+      try {
+        if (typeof dbAddToPipeline === 'function') {
+          const added = await dbAddToPipeline(editalId, 'proposta', 'media');
+          if (added) {
+            PIPELINE.push({ id: added.id, editalId: editalId, edital_id: editalId, coluna: 'proposta', prioridade: 'media' });
+          }
+        }
+      } catch(err){}
+    }
+  }
+
   return salvo;
 }
 
@@ -327,6 +352,45 @@ async function dbSaveRpaTask(task) {
   const list = getLocalFallback('rpa_tasks').filter(t => String(t.id) !== String(salvo.id));
   list.unshift(salvo);
   saveLocalFallback('rpa_tasks', list);
+  return salvo;
+}
+
+async function dbGetKanbanColunas() {
+  let nuvem = [];
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.from('kanban_colunas').select('*').order('posicao', { ascending: true });
+      if (!error && data) nuvem = data;
+    } catch(e){}
+  }
+  const local = getLocalFallback('kanban_colunas');
+  const mapa = new Map();
+  local.forEach(item => mapa.set(item.key, item));
+  nuvem.forEach(item => mapa.set(item.key, item));
+  
+  let list = Array.from(mapa.values()).sort((a,b) => (a.posicao || 0) - (b.posicao || 0));
+  if (list.length === 0) {
+    list = [...DEFAULT_KANBAN_COLUNAS];
+  }
+  return list;
+}
+
+async function dbSaveKanbanColuna(coluna) {
+  const row = {
+    key: coluna.key,
+    label: coluna.label,
+    posicao: coluna.posicao || 0
+  };
+  let salvo = { id: coluna.id || Date.now().toString(), created_at: new Date().toISOString(), ...row };
+  try {
+    if (supabaseClient) {
+      const { data, error } = await supabaseClient.from('kanban_colunas').insert([row]).select();
+      if (!error && data && data[0]) salvo = data[0];
+    }
+  } catch(e){}
+  const list = getLocalFallback('kanban_colunas').filter(c => c.key !== salvo.key);
+  list.push(salvo);
+  saveLocalFallback('kanban_colunas', list);
   return salvo;
 }
 

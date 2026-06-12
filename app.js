@@ -635,15 +635,16 @@ window.salvarEditalIA = async function(num, mod, org, val, analysis, provider, e
     
     if(savedEdital && savedEdital.id) {
       if(!editalId) {
-        await dbAddToPipeline(savedEdital.id, 'prospeccao', 'media');
+        await dbAddToPipeline(savedEdital.id, 'analise', 'media');
         
         EDITAIS.push({
           id: savedEdital.id, numero: num, modalidade: modalLocal, orgao: org,
           valorEstimado: val || 0, dataAbertura: new Date().toISOString().split('T')[0],
-          status: 'Aberto', objeto: 'Extraído via IA', plataforma: 'N/A', keywords: []
+          status: 'Aberto', objeto: 'Extraído via IA', plataforma: 'N/A', keywords: [],
+          ai_analysis: analysis, ai_provider: provider
         });
         if(typeof PIPELINE !== 'undefined') {
-          PIPELINE.push({editalId: savedEdital.id, coluna: 'prospeccao', prioridade: 'media'});
+          PIPELINE.push({id: savedEdital.id, editalId: savedEdital.id, edital_id: savedEdital.id, coluna: 'analise', prioridade: 'media'});
         }
       } else {
         const idx = EDITAIS.findIndex(x => String(x.id) === String(editalId));
@@ -654,6 +655,27 @@ window.salvarEditalIA = async function(num, mod, org, val, analysis, provider, e
           EDITAIS[idx].modalidade = modalLocal;
           EDITAIS[idx].orgao = org;
           EDITAIS[idx].valorEstimado = val || EDITAIS[idx].valorEstimado;
+        }
+        // Move to 'analise' stage in pipeline if it is in 'prospeccao'
+        if (typeof PIPELINE !== 'undefined') {
+          const p = PIPELINE.find(x => String(x.editalId || x.edital_id) === String(editalId));
+          if (p) {
+            if (p.coluna === 'prospeccao') {
+              p.coluna = 'analise';
+              if (typeof dbUpdatePipelineColuna === 'function' && p.id) {
+                try {
+                  await dbUpdatePipelineColuna(p.id, 'analise');
+                } catch(err) {}
+              }
+            }
+          } else {
+            try {
+              const added = await dbAddToPipeline(editalId, 'analise', 'media');
+              if (added) {
+                PIPELINE.push({ id: added.id, editalId: editalId, edital_id: editalId, coluna: 'analise', prioridade: 'media' });
+              }
+            } catch(err){}
+          }
         }
       }
       
@@ -930,10 +952,14 @@ Podemos marcar uma rápida ligação para discutirmos os próximos passos?`;
 
 // ===== KANBAN =====
 function renderKanban(){
-  const cols=[
-    {key:'prospeccao',label:'Prospecção'},{key:'analise',label:'Análise Edital'},{key:'proposta',label:'Proposta em Elaboração'},{key:'enviado',label:'Enviado / Sessão'},{key:'concluido',label:'Concluído'}
-  ];
-  app.innerHTML=`<div class="page-header"><div><h1>Pipeline de Licitações</h1><p>Acompanhe o progresso de cada edital</p></div></div>
+  const cols = KANBAN_COLUNAS && KANBAN_COLUNAS.length > 0 ? KANBAN_COLUNAS : DEFAULT_KANBAN_COLUNAS;
+  app.innerHTML=`<div class="page-header">
+    <div>
+      <h1>Pipeline de Licitações</h1>
+      <p>Acompanhe o progresso de cada edital</p>
+    </div>
+    <button class="btn btn-primary" onclick="abrirNovaColunaKanban()"><i class="ti ti-plus"></i> Nova Coluna</button>
+  </div>
   <div class="kanban">${cols.map(col=>{
     const items=PIPELINE.filter(p=>p.coluna===col.key);
     return `<div class="kanban-col" ondragover="allowDrop(event)" ondrop="drop(event, '${col.key}')"><div class="kanban-col-header"><span class="kanban-col-title">${col.label}</span><span class="kanban-count">${items.length}</span></div>
@@ -948,13 +974,69 @@ function renderKanban(){
   }).join('')}</div>`;
 }
 
+window.abrirNovaColunaKanban = function() {
+  openModal(`<div class="modal-header"><h2>Nova Coluna no Pipeline</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+  <form onsubmit="salvarNovaColunaKanban(event)">
+    <div class="form-group">
+      <label>Nome da Coluna <span style="color:#ef4444">*</span></label>
+      <input id="nk-label" required placeholder="Ex: Qualificação, Negociação, etc.">
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button type="submit" class="btn btn-primary">Criar Coluna</button>
+    </div>
+  </form>`);
+};
+
+window.salvarNovaColunaKanban = async function(event) {
+  event.preventDefault();
+  const label = document.getElementById('nk-label').value.trim();
+  if (!label) return;
+  
+  const key = label.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/(^_+|_+$)/g, '');
+  if (!key) {
+    alert('Nome de coluna inválido.');
+    return;
+  }
+  
+  // Check if key already exists
+  const cols = KANBAN_COLUNAS && KANBAN_COLUNAS.length > 0 ? KANBAN_COLUNAS : DEFAULT_KANBAN_COLUNAS;
+  if (cols.some(c => c.key === key)) {
+    alert('Já existe uma coluna com este nome ou similar.');
+    return;
+  }
+  
+  const novaPosicao = cols.length + 1;
+  const novaCol = { key, label, posicao: novaPosicao };
+  
+  try {
+    const salvo = await dbSaveKanbanColuna(novaCol);
+    if (salvo) {
+      if (KANBAN_COLUNAS.length === 0) {
+        KANBAN_COLUNAS = [...DEFAULT_KANBAN_COLUNAS];
+      }
+      KANBAN_COLUNAS.push(salvo);
+    }
+  } catch(e) {
+    console.warn("Erro ao salvar coluna no banco, inserindo localmente:", e);
+    if (KANBAN_COLUNAS.length === 0) {
+      KANBAN_COLUNAS = [...DEFAULT_KANBAN_COLUNAS];
+    }
+    KANBAN_COLUNAS.push(novaCol);
+  }
+  
+  closeModal();
+  renderKanban();
+};
+
 window.abrirDetalhesEdital = function(editalId) {
   const e = EDITAIS.find(x => String(x.id) === String(editalId));
   if(!e) return;
   const p = PIPELINE.find(x => String(x.editalId || x.edital_id) === String(editalId)) || {};
 
-  const colLabels = {prospeccao:'Prospecção', analise:'Análise Edital', proposta:'Proposta em Elaboração', enviado:'Enviado / Sessão', concluido:'Concluído'};
-  const statusAtual = colLabels[p.coluna] || e.status || 'Ativo';
+  const cols = KANBAN_COLUNAS && KANBAN_COLUNAS.length > 0 ? KANBAN_COLUNAS : DEFAULT_KANBAN_COLUNAS;
+  const colObj = cols.find(c => c.key === p.coluna);
+  const statusAtual = colObj ? colObj.label : (e.status || 'Ativo');
 
   let aiBlock = '';
   if(e.aiAnalysis || e.ai_analysis || e.pdfText || e.pdf_text) {
@@ -1206,6 +1288,7 @@ async function loadSupabaseData() {
   CLIENTES = await dbGetClientes() || [];
   PIPELINE = await dbGetPipeline() || [];
   EDITAL_CLIENTES = await dbGetAllEditalClientes() || [];
+  KANBAN_COLUNAS = await dbGetKanbanColunas() || [];
   if (typeof computeRelatorios === 'function') computeRelatorios();
   if (typeof computeAlertas === 'function') computeAlertas();
 }
