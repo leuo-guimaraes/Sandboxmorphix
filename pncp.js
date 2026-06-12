@@ -139,6 +139,10 @@ window.togglePNCPPanel = function() {
 };
 
 // ===== BUSCA NA API PNCP =====
+// NOTA: codigoModalidadeContratacao é OBRIGATÓRIO na API do PNCP.
+// Quando o usuário seleciona "Todas", fazemos buscas paralelas por modalidade.
+const PNCP_MODALIDADES_BUSCA = [7, 5, 8, 9, 4, 6]; // Pregão eletr, Concorrência, Dispensa, Inexigibilidade, Concorrência pres, Credenciamento
+
 window.buscarEditalPNCP = async function(pagina = 1) {
   const btn = document.getElementById('btn-pncp-buscar');
   const resultsEl = document.getElementById('pncp-results');
@@ -155,7 +159,7 @@ window.buscarEditalPNCP = async function(pagina = 1) {
     return;
   }
 
-  // Validar que período não é muito longo (API limita)
+  // Validar período (API limita a 31 dias)
   const d1 = new Date(dataIni.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'));
   const d2 = new Date(dataFim.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'));
   if ((d2 - d1) / 86400000 > 31) {
@@ -174,47 +178,90 @@ window.buscarEditalPNCP = async function(pagina = 1) {
     </div>`;
 
   try {
-    let url = `${PNCP_BASE}/contratacoes/publicacao?dataInicial=${dataIni}&dataFinal=${dataFim}&pagina=${pagina}&tamanhoPagina=20`;
-    if (uf) url += `&uf=${uf}`;
-    if (modalidade) url += `&codigoModalidadeContratacao=${modalidade}`;
+    let todosItens = [];
+    let totalReg = 0;
+    let totalPag = 1;
+    let pagAtual = pagina;
 
-    const res = await fetch(url);
+    // Função para buscar uma modalidade específica
+    const fetchModalidade = async (codMod) => {
+      let url = `${PNCP_BASE}/contratacoes/publicacao?dataInicial=${dataIni}&dataFinal=${dataFim}&pagina=${pagina}&tamanhoPagina=20&codigoModalidadeContratacao=${codMod}`;
+      if (uf) url += `&uf=${uf}`;
+      const res = await fetch(url);
+      if (res.status === 404) return null; // sem resultados para esta modalidade
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    };
 
-    if (!res.ok) {
-      if (res.status === 404) {
-        resultsEl.innerHTML = renderPNCPVazio('Nenhuma licitação encontrada para o período/filtros selecionados.');
-        return;
+    if (modalidade) {
+      // ── Modalidade específica selecionada ──
+      const data = await fetchModalidade(modalidade);
+      if (data) {
+        todosItens = Array.isArray(data) ? data : (data.data || []);
+        totalReg = data.totalRegistros || todosItens.length;
+        totalPag = data.totalPaginas || 1;
+        pagAtual = data.numeroPagina || pagina;
       }
-      throw new Error(`Erro HTTP ${res.status} — ${res.statusText}`);
+    } else {
+      // ── "Todas": busca paralela nas principais modalidades ──
+      resultsEl.querySelector('div > div:nth-child(2)').textContent = 'Buscando em múltiplas modalidades...';
+      const resultados = await Promise.allSettled(
+        PNCP_MODALIDADES_BUSCA.map(cod => fetchModalidade(cod))
+      );
+
+      // Combinar resultados bem-sucedidos, removendo duplicatas por numeroControlePNCP
+      const vistosKeys = new Set();
+      resultados.forEach(r => {
+        if (r.status === 'fulfilled' && r.value) {
+          const itens = Array.isArray(r.value) ? r.value : (r.value.data || []);
+          totalReg += r.value.totalRegistros || itens.length;
+          itens.forEach(item => {
+            const key = item.numeroControlePNCP || String(item.sequencialCompra);
+            if (!vistosKeys.has(key)) {
+              vistosKeys.add(key);
+              todosItens.push(item);
+            }
+          });
+        }
+      });
+
+      // Ordenar por data de publicação (mais recente primeiro)
+      todosItens.sort((a, b) => {
+        const da = a.dataPublicacaoPncp || '';
+        const db = b.dataPublicacaoPncp || '';
+        return db.localeCompare(da);
+      });
+
+      // Paginação manual no modo "Todas"
+      totalPag = 1; // paginação simples quando agregado
+      pagAtual = 1;
     }
 
-    const data = await res.json();
-    // A API retorna { data: [...], totalRegistros, totalPaginas, numeroPagina }
-    const itens = Array.isArray(data) ? data : (data.data || []);
-    const totalPag = data.totalPaginas || 1;
-    const totalReg = data.totalRegistros || itens.length;
-    const pagAtual = data.numeroPagina || pagina;
+    if (todosItens.length === 0) {
+      resultsEl.innerHTML = renderPNCPVazio('Nenhuma licitação encontrada para o período/filtros selecionados.');
+      return;
+    }
 
     // Filtro local por palavra-chave
     const filtrados = keyword
-      ? itens.filter(i => (i.objetoCompra || '').toLowerCase().includes(keyword) || (i.orgaoEntidade?.razaoSocial || '').toLowerCase().includes(keyword))
-      : itens;
+      ? todosItens.filter(i => (i.objetoCompra || '').toLowerCase().includes(keyword) || (i.orgaoEntidade?.razaoSocial || '').toLowerCase().includes(keyword))
+      : todosItens;
 
     // Salvar pendentes (excluindo já ignorados e já aceitos)
     PNCP_PENDENTES = filtrados.filter(i => {
-      const key = i.numeroControlePNCP || i.sequencialCompra;
+      const key = i.numeroControlePNCP || String(i.sequencialCompra);
       return !PNCP_IGNORADOS.has(key) && !EDITAIS.some(e => e.pncp_id === key);
     });
 
     renderPNCPResultados(PNCP_PENDENTES, pagAtual, totalPag, totalReg, keyword);
     atualizarBadgePNCP();
 
-    // Controles de paginação
+    // Paginação (só disponível quando modalidade específica)
     const pag = document.getElementById('pncp-paginator');
     const pagInfo = document.getElementById('pncp-pag-info');
     const btnPrev = document.getElementById('btn-pncp-prev');
     const btnNext = document.getElementById('btn-pncp-next');
-    if (pag && totalPag > 1) {
+    if (pag && totalPag > 1 && modalidade) {
       pag.style.display = 'flex';
       if (pagInfo) pagInfo.textContent = `Página ${pagAtual} de ${totalPag} (${totalReg} registros)`;
       if (btnPrev) btnPrev.disabled = pagAtual <= 1;
@@ -228,11 +275,12 @@ window.buscarEditalPNCP = async function(pagina = 1) {
 
   } catch (err) {
     console.error('[PNCP]', err);
-    mostrarPNCPErro(err.message);
+    mostrarPNCPErro(`${err.message} — Verifique os filtros e tente novamente.`);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-search"></i> Buscar no PNCP'; }
   }
 };
+
 
 // ===== RENDER DE RESULTADOS =====
 function renderPNCPResultados(itens, pagAtual, totalPag, totalReg, keyword) {
