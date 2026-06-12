@@ -354,7 +354,7 @@ function renderAnalise(){
     </div>
     <div style="display:flex;gap:20px;align-items:stretch">
       <div class="upload-area" style="flex:1" id="drop-zone" onclick="document.getElementById('ia-file').click()">
-        <input type="file" id="ia-file" accept=".pdf" style="display:none" onchange="handleFileSelect(this)">
+        <input type="file" id="ia-file" accept=".pdf" multiple style="display:none" onchange="handleFileSelect(this)">
         <i class="ti ti-file-type-pdf"></i>
         <div style="font-weight:600;font-size:.9rem" id="file-label">Upload de PDF do Edital</div>
         <div style="font-size:.75rem;margin-top:4px">Arraste ou clique para selecionar o arquivo</div>
@@ -400,11 +400,18 @@ function navigateTo(page){
 }
 
 function handleFileSelect(input){
-  const file=input.files[0];
-  if(!file)return;
-  lastAnalysisFile=file;
+  const files=Array.from(input.files);
+  if(!files.length)return;
+  lastAnalysisFile=files;
   const label=document.getElementById('file-label');
-  if(label)label.textContent=file.name+' ('+formatBytes(file.size)+')';
+  if(label) {
+    if(files.length === 1) {
+      label.textContent=files[0].name+' ('+formatBytes(files[0].size)+')';
+    } else {
+      const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+      label.textContent=`${files.length} arquivos selecionados (${formatBytes(totalSize)})`;
+    }
+  }
   const btn=document.getElementById('btn-analyze');
   if(btn)btn.disabled=false;
 }
@@ -421,11 +428,18 @@ function setupDragDrop(){
   ['dragenter','dragover'].forEach(e=>zone.addEventListener(e,ev=>{ev.preventDefault();zone.style.borderColor='var(--primary)';zone.style.background='var(--primary-light)'}));
   ['dragleave','drop'].forEach(e=>zone.addEventListener(e,ev=>{ev.preventDefault();zone.style.borderColor='';zone.style.background=''}));
   zone.addEventListener('drop',ev=>{
-    const file=ev.dataTransfer.files[0];
-    if(file&&file.type==='application/pdf'){
-      lastAnalysisFile=file;
+    const files=Array.from(ev.dataTransfer.files).filter(file=>file.type==='application/pdf');
+    if(files.length){
+      lastAnalysisFile=files;
       const label=document.getElementById('file-label');
-      if(label)label.textContent=file.name+' ('+formatBytes(file.size)+')';
+      if(label) {
+        if(files.length === 1) {
+          label.textContent=files[0].name+' ('+formatBytes(files[0].size)+')';
+        } else {
+          const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+          label.textContent=`${files.length} arquivos selecionados (${formatBytes(totalSize)})`;
+        }
+      }
       const btn=document.getElementById('btn-analyze');
       if(btn)btn.disabled=false;
     }
@@ -536,13 +550,24 @@ async function displayAIResult(result){
   window._lastAIAnalysisProvider = result.provider;
   window._lastAIAnalysisEditalId = editalId;
 
+  let fileNames = '';
+  if (lastAnalysisFile) {
+    if (lastAnalysisFile.isText) {
+      fileNames = lastAnalysisFile.name;
+    } else if (Array.isArray(lastAnalysisFile)) {
+      fileNames = lastAnalysisFile.map(f => f.name).join(', ');
+    } else {
+      fileNames = lastAnalysisFile.name || 'Edital';
+    }
+  }
+
   resultEl.innerHTML=`
   <div class="card" style="margin-top:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div class="section-title" style="margin:0"><i class="ti ti-sparkles"></i> Resultado da Análise</div>
       <div style="display:flex;align-items:center;gap:8px">
         <span class="chip" style="background:${providerColor}20;color:${providerColor}"><i class="ti ti-${providerIcon}" style="font-size:.7rem"></i> ${providerLabel}</span>
-        <span class="chip chip-gray">${lastAnalysisFile?lastAnalysisFile.name:''}</span>
+        <span class="chip chip-gray" title="${fileNames}">${fileNames.length > 30 ? fileNames.substring(0, 27) + '...' : fileNames}</span>
       </div>
     </div>
     <div class="ai-response">${renderMarkdown(result.response)}</div>
