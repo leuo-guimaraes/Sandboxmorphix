@@ -48,6 +48,7 @@ function getAIConfig(){
   const defaults={
     openai_key:'',openai_model:'gpt-4o',
     claude_key:'',claude_model:'claude-sonnet-4-20250514',
+    mistral_key:'',mistral_model:'mistral-large-latest',
     airtop_key:'',
     prompt:DEFAULT_PROMPT,
     provider:'openai'
@@ -199,10 +200,37 @@ async function callClaude(text,config){
   return data.content[0].text;
 }
 
+// ===== MISTRAL API =====
+async function callMistral(text,config){
+  const prepared = truncateForAPI(text);
+  const resp=await fetch('https://api.mistral.ai/v1/chat/completions',{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+config.mistral_key
+    },
+    body:JSON.stringify({
+      model:config.mistral_model,
+      messages:[
+        {role:'system',content:config.prompt},
+        {role:'user',content:'Analise o seguinte edital de licitação:\n\n'+prepared.text}
+      ],
+      max_tokens:3000,
+      temperature:0.3
+    })
+  });
+  if(!resp.ok){
+    const err=await resp.json().catch(()=>({}));
+    throw new Error(err.message||`Erro Mistral: ${resp.status}`);
+  }
+  const data=await resp.json();
+  return data.choices[0].message.content;
+}
+
 // ===== MAIN ANALYSIS FUNCTION =====
 async function runAIAnalysis(fileOrFiles,provider,useOcr=true){
   const config=getAIConfig();
-  const key=provider==='openai'?config.openai_key:config.claude_key;
+  const key=provider==='openai'?config.openai_key:(provider==='claude'?config.claude_key:config.mistral_key);
   if(!key){
     const progress=createProgressUI('ai-progress-container');
     if(progress) {
@@ -353,7 +381,8 @@ Licitação, PNCP, Compras Governamentais, Gestão de Editais, Aquisição de Be
 
   // Step 3: Send to AI
   progress.setStep(2);
-  progress.setProgress(55, `Enviando ${files.length} arquivo(s) para ${provider==='openai'?'OpenAI':'Claude'}...${truncMsg}`);
+  const providerLabel = provider === 'openai' ? 'OpenAI' : (provider === 'claude' ? 'Claude' : 'Mistral');
+  progress.setProgress(55, `Enviando ${files.length} arquivo(s) para ${providerLabel}...${truncMsg}`);
   await sleep(300);
 
   progress.setStep(3);
@@ -362,7 +391,8 @@ Licitação, PNCP, Compras Governamentais, Gestão de Editais, Aquisição de Be
   let response;
   try{
     if(provider==='openai'){response=await callOpenAI(pdfText,config)}
-    else{response=await callClaude(pdfText,config)}
+    else if(provider==='claude'){response=await callClaude(pdfText,config)}
+    else{response=await callMistral(pdfText,config)}
   }catch(e){throw e}
 
   // Step 4: Done
@@ -472,6 +502,33 @@ function renderConfigIA(){
       <button class="btn btn-sm btn-outline" onclick="testAIConnection('claude')"><i class="ti ti-plug"></i> Testar Conexão</button>
       <span id="test-claude-result" style="font-size:.72rem;margin-left:8px"></span>
     </div>
+
+    <!-- Mistral Config -->
+    <div class="card config-card">
+      <div class="config-card-header">
+        <div class="provider-icon" style="background:#ff5b0020;color:#ff5b00"><i class="ti ti-lambda"></i></div>
+        <div><h3>Mistral AI</h3><span style="font-size:.7rem;color:var(--gray-400)">Mistral Large, Mistral Small</span></div>
+      </div>
+      <div class="form-group">
+        <label>API Key</label>
+        <div class="api-key-input">
+          <input type="password" id="cfg-mistral-key" value="${cfg.mistral_key || ''}" placeholder="Chave do Mistral...">
+          <button onclick="toggleKeyVis('cfg-mistral-key')"><i class="ti ti-eye"></i></button>
+        </div>
+        <div class="config-status ${cfg.mistral_key?'ok':'err'}">
+          <i class="ti ti-${cfg.mistral_key?'circle-check':'alert-circle'}"></i>
+          ${cfg.mistral_key?'Chave configurada':'Chave não configurada'}
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Modelo</label>
+        <select id="cfg-mistral-model">
+          ${['mistral-large-latest','mistral-small-latest','codestral-latest'].map(m=>`<option ${cfg.mistral_model===m?'selected':''}>${m}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn btn-sm btn-outline" onclick="testAIConnection('mistral')"><i class="ti ti-plug"></i> Testar Conexão</button>
+      <span id="test-mistral-result" style="font-size:.72rem;margin-left:8px"></span>
+    </div>
   </div>
 
   <div class="grid-2" style="margin-top:16px">
@@ -565,6 +622,8 @@ function saveConfigIA(){
     openai_model:document.getElementById('cfg-openai-model').value,
     claude_key:document.getElementById('cfg-claude-key').value.trim(),
     claude_model:document.getElementById('cfg-claude-model').value,
+    mistral_key:document.getElementById('cfg-mistral-key').value.trim(),
+    mistral_model:document.getElementById('cfg-mistral-model').value,
     airtop_key:document.getElementById('cfg-airtop-key')?.value.trim() || '',
     prompt:document.getElementById('cfg-prompt').value,
     provider:getAIConfig().provider||'openai'
@@ -595,7 +654,9 @@ async function testAIConnection(provider){
   // Also grab the unsaved values from the form
   const key=provider==='openai'
     ?(document.getElementById('cfg-openai-key')?.value||cfg.openai_key)
-    :(document.getElementById('cfg-claude-key')?.value||cfg.claude_key);
+    :(provider==='claude'
+      ?(document.getElementById('cfg-claude-key')?.value||cfg.claude_key)
+      :(document.getElementById('cfg-mistral-key')?.value||cfg.mistral_key));
   const resultEl=document.getElementById('test-'+provider+'-result');
   if(!key){
     if(resultEl)resultEl.innerHTML='<span style="color:var(--danger)">⚠ Insira uma chave primeiro</span>';
@@ -606,13 +667,20 @@ async function testAIConnection(provider){
     if(provider==='openai'){
       const r=await fetch('https://api.openai.com/v1/models',{headers:{'Authorization':'Bearer '+key}});
       if(!r.ok)throw new Error('Status '+r.status);
-    }else{
+    }else if(provider==='claude'){
       const r=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
         body:JSON.stringify({model:'claude-3-haiku-20240307',max_tokens:10,messages:[{role:'user',content:'ping'}]})
       });
       if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error?.message||'Status '+r.status)}
+    }else{
+      const r=await fetch('https://api.mistral.ai/v1/chat/completions',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+        body:JSON.stringify({model:'mistral-small-latest',max_tokens:10,messages:[{role:'user',content:'ping'}]})
+      });
+      if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.message||'Status '+r.status)}
     }
     if(resultEl)resultEl.innerHTML='<span style="color:var(--success)">✓ Conexão OK</span>';
   }catch(e){

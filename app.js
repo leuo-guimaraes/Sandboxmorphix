@@ -317,7 +317,11 @@ function renderAnalise(){
   const cfg=getAIConfig();
   const hasOpenAI=!!cfg.openai_key;
   const hasClaude=!!cfg.claude_key;
+  const hasMistral=!!cfg.mistral_key;
   selectedProvider=cfg.provider||'openai';
+
+  const providerLabel = selectedProvider === 'openai' ? 'OpenAI' : (selectedProvider === 'claude' ? 'Claude' : 'Mistral');
+  const activeModel = selectedProvider === 'openai' ? cfg.openai_model : (selectedProvider === 'claude' ? cfg.claude_model : cfg.mistral_model);
 
   app.innerHTML=`
   <div class="page-header"><div><h1>Análise IA</h1><p>Análise inteligente de editais com inteligência artificial</p></div>
@@ -332,6 +336,10 @@ function renderAnalise(){
     <div class="provider-tab ${selectedProvider==='claude'?'active':''}" onclick="selectProvider('claude')">
       <i class="ti ti-brain"></i> Claude
       ${hasClaude?'<span class="chip chip-green" style="font-size:.6rem">Ativo</span>':'<span class="chip chip-red" style="font-size:.6rem">Sem chave</span>'}
+    </div>
+    <div class="provider-tab ${selectedProvider==='mistral'?'active':''}" onclick="selectProvider('mistral')">
+      <i class="ti ti-lambda"></i> Mistral
+      ${hasMistral?'<span class="chip chip-green" style="font-size:.6rem">Ativo</span>':'<span class="chip chip-red" style="font-size:.6rem">Sem chave</span>'}
     </div>
   </div>
 
@@ -352,8 +360,8 @@ function renderAnalise(){
         <div style="font-size:.75rem;margin-top:4px">Arraste ou clique para selecionar o arquivo</div>
       </div>
       <div style="display:flex;flex-direction:column;justify-content:center;min-width:180px">
-        <div style="font-size:.75rem;color:var(--gray-500);margin-bottom:8px">Provedor: <strong>${selectedProvider==='openai'?'OpenAI':'Claude'}</strong></div>
-        <div style="font-size:.75rem;color:var(--gray-500);margin-bottom:12px">Modelo: <strong>${selectedProvider==='openai'?cfg.openai_model:cfg.claude_model}</strong></div>
+        <div style="font-size:.75rem;color:var(--gray-500);margin-bottom:8px">Provedor: <strong>${providerLabel}</strong></div>
+        <div style="font-size:.75rem;color:var(--gray-500);margin-bottom:12px">Modelo: <strong>${activeModel}</strong></div>
         <div style="margin-bottom:12px;display:flex;align-items:center;gap:6px">
           <input type="checkbox" id="ia-use-ocr" checked style="cursor:pointer">
           <label for="ia-use-ocr" style="font-size:.75rem;font-weight:600;cursor:pointer;margin:0;color:var(--gray-700)" title="Ativa reconhecimento óptico de caracteres em PDFs de imagem/escaneados">PDF + OCR Fallback</label>
@@ -460,13 +468,15 @@ async function startAnalysis(){
     if(lastAnalysisFile.isText) {
       const config = getAIConfig();
       const progress = createProgressUI('ai-progress-container');
+      const providerLabel = selectedProvider === 'openai' ? 'OpenAI' : (selectedProvider === 'claude' ? 'Claude' : 'Mistral');
       if(progress) {
         progress.setStep(2);
-        progress.setProgress(55, `Enviando texto do edital para ${selectedProvider}...`);
+        progress.setProgress(55, `Enviando texto do edital para ${providerLabel}...`);
       }
       let resp;
       if(selectedProvider === 'openai') resp = await callOpenAI(lastAnalysisFile.content, config);
-      else resp = await callClaude(lastAnalysisFile.content, config);
+      else if(selectedProvider === 'claude') resp = await callClaude(lastAnalysisFile.content, config);
+      else resp = await callMistral(lastAnalysisFile.content, config);
       
       if(progress) {
         progress.setStep(4);
@@ -494,8 +504,12 @@ async function startAnalysis(){
 async function displayAIResult(result){
   const resultEl=document.getElementById('ia-result');
   if(!resultEl)return;
-  const providerLabel=result.provider.includes('openai')?'OpenAI':'Claude';
-  const providerColor=result.provider.includes('openai')?'#10a37f':'#d47838';
+  
+  const isOpenAI = result.provider.includes('openai');
+  const isClaude = result.provider.includes('claude');
+  const providerLabel = isOpenAI ? 'OpenAI' : (isClaude ? 'Claude' : 'Mistral');
+  const providerColor = isOpenAI ? '#10a37f' : (isClaude ? '#d47838' : '#ff5b00');
+  const providerIcon = isOpenAI ? 'brand-openai' : (isClaude ? 'brain' : 'lambda');
 
   // Extract info from markdown to save to DB
   let num='Sem número', mod='Desconhecida', org='Desconhecido', val=0;
@@ -527,7 +541,7 @@ async function displayAIResult(result){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div class="section-title" style="margin:0"><i class="ti ti-sparkles"></i> Resultado da Análise</div>
       <div style="display:flex;align-items:center;gap:8px">
-        <span class="chip" style="background:${providerColor}20;color:${providerColor}"><i class="ti ti-${result.provider.includes('openai')?'brand-openai':'brain'}" style="font-size:.7rem"></i> ${providerLabel}</span>
+        <span class="chip" style="background:${providerColor}20;color:${providerColor}"><i class="ti ti-${providerIcon}" style="font-size:.7rem"></i> ${providerLabel}</span>
         <span class="chip chip-gray">${lastAnalysisFile?lastAnalysisFile.name:''}</span>
       </div>
     </div>
