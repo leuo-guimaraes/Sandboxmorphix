@@ -123,15 +123,28 @@ function filterCRM(){
 
 function verCliente(id){
   const c=CLIENTES.find(x=>x.id===id);if(!c)return;
-  // Simulando vinculados locais para demonstração
-  const vinculados=[];
+  const situacaoCor = (c.situacao||'').toLowerCase().includes('ativa') ? '#10b981' : '#f59e0b';
   openModal(`<div class="modal-header"><h2>${c.nome}</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-    <div style="display:flex;gap:16px;margin-bottom:20px">
-      <div class="avatar" style="width:64px;height:64px;font-size:1.5rem;background:${c.cor}">${initials(c.nome)}</div>
-      <div><div style="color:var(--gray-500);font-size:.8rem">${c.cnpj}</div><div style="font-weight:600;margin:4px 0">${c.area}</div>
-      <div style="font-size:.8rem"><i class="ti ti-mail"></i> ${c.contato}</div></div>
+    <div style="display:flex;gap:16px;margin-bottom:16px;align-items:flex-start">
+      <div class="avatar" style="width:64px;height:64px;font-size:1.5rem;flex-shrink:0;background:${c.cor}">${initials(c.nome)}</div>
+      <div style="flex:1">
+        ${c.fantasia?`<div style="font-size:.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Nome Fantasia</div><div style="font-weight:700;font-size:1rem;margin-bottom:4px">${c.fantasia}</div>`:''}
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+          <span class="chip chip-gray"><i class="ti ti-id-badge" style="font-size:.7rem"></i> ${c.cnpj}</span>
+          <span class="chip" style="background:${c.cor}20;color:${c.cor}">${c.area}</span>
+          ${c.situacao?`<span class="chip" style="background:${situacaoCor}20;color:${situacaoCor}"><i class="ti ti-circle-check" style="font-size:.7rem"></i> ${c.situacao}</span>`:''}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.8rem;color:var(--gray-600)">
+          ${c.contato?`<div><i class="ti ti-mail" style="color:var(--primary)"></i> ${c.contato}</div>`:''}
+          ${c.telefone?`<div><i class="ti ti-phone" style="color:var(--primary)"></i> ${c.telefone}</div>`:''}
+          ${c.municipio?`<div><i class="ti ti-map-pin" style="color:var(--primary)"></i> ${c.municipio}${c.uf?'/'+c.uf:''}</div>`:''}
+          ${c.cep?`<div><i class="ti ti-mailbox" style="color:var(--primary)"></i> CEP ${c.cep}</div>`:''}
+        </div>
+        ${c.endereco?`<div style="font-size:.78rem;color:var(--gray-500);margin-top:4px"><i class="ti ti-building"></i> ${c.endereco}</div>`:''}
+        ${c.cnae?`<div style="font-size:.75rem;color:var(--gray-400);margin-top:4px;font-style:italic"><i class="ti ti-category"></i> CNAE: ${c.cnae}</div>`:''}
+      </div>
     </div>
-    
+
     <div class="section-title"><i class="ti ti-file-text"></i> Editais Vinculados</div>
     <div style="margin-bottom:16px">
       <button class="btn btn-sm btn-outline" onclick="abrirVincularEdital(${id})"><i class="ti ti-link"></i> Vincular Novo Edital</button>
@@ -198,28 +211,239 @@ Equipe Sandbox Morphix`);
 
 function openNovoCliente(c){
   const edit=!!c;const title=edit?'Editar Cliente':'Novo Cliente';
+  const areas=['Tecnologia','Saúde','Construção','Alimentação','Segurança','Serviços','Outros'];
   openModal(`<div class="modal-header"><h2>${title}</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-  <form onsubmit="salvarCliente(event,${edit?c.id:'null'})">
-    <div class="form-group"><label>Nome da Empresa</label><input id="nc-nome" required value="${c?c.nome:''}"></div>
-    <div class="form-group"><label>CNPJ</label><input id="nc-cnpj" required value="${c?c.cnpj:''}" placeholder="00.000.000/0001-00"></div>
-    <div class="form-group"><label>Área de Atuação</label><select id="nc-area" required>
-      ${['Tecnologia','Saúde','Construção','Alimentação','Segurança','Serviços','Outros'].map(a=>`<option ${c&&c.area===a?'selected':''}>${a}</option>`).join('')}
-    </select></div>
-    <div class="form-group"><label>Produtos/Serviços (separar por vírgula)</label><input id="nc-prod" value="${c?c.produtos.join(', '):''}" placeholder="produto1, produto2..."></div>
-    <div class="form-group"><label>Contato (email)</label><input id="nc-contato" type="email" value="${c?c.contato:''}"></div>
-    <div class="form-group"><label>Palavras-chave para Matching (separar por vírgula)</label><textarea id="nc-kw" placeholder="palavra1, palavra2...">${c?c.keywords.join(', '):''}</textarea></div>
-    <div class="form-group"><label>Observações</label><textarea id="nc-obs">${c?c.obs:''}</textarea></div>
-    <div class="form-actions"><button type="button" class="btn btn-outline" onclick="closeModal()">Cancelar</button><button type="submit" class="btn btn-primary">${edit?'Salvar Alterações':'Cadastrar'}</button></div>
+  <form onsubmit="salvarCliente(event,${edit?c.id:'null'})" autocomplete="off">
+
+    <!-- BLOCO CNPJ com busca API GOV -->
+    <div style="background:linear-gradient(135deg,#eff6ff,#f0fdf4);border:1.5px solid #bfdbfe;border-radius:12px;padding:16px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <i class="ti ti-building-store" style="color:#3b82f6;font-size:1.1rem"></i>
+        <span style="font-weight:700;font-size:.85rem;color:#1e40af">Consulta Automática — CNPJ Federal</span>
+        <span style="font-size:.72rem;color:#64748b;background:#e0f2fe;padding:2px 8px;border-radius:99px">API GOV gratuita</span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-end">
+        <div class="form-group" style="flex:1;margin:0">
+          <label style="font-size:.8rem;font-weight:600;color:#374151">CNPJ <span style="color:#ef4444">*</span></label>
+          <input id="nc-cnpj" required value="${c?c.cnpj:''}" placeholder="00.000.000/0001-00"
+            style="font-size:.95rem;font-weight:600;letter-spacing:1px"
+            oninput="mascararCNPJ(this)" onblur="if(this.value.replace(/\\D/g,'').length===14)buscarCNPJ()">
+        </div>
+        <button type="button" id="btn-buscar-cnpj" class="btn btn-primary" style="height:40px;white-space:nowrap;gap:6px" onclick="buscarCNPJ()">
+          <i class="ti ti-search"></i> Consultar CNPJ
+        </button>
+      </div>
+      <div id="cnpj-status" style="margin-top:8px;font-size:.78rem"></div>
+    </div>
+
+    <!-- DADOS DA EMPRESA -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group" style="grid-column:1/-1">
+        <label>Razão Social / Nome da Empresa <span style="color:#ef4444">*</span></label>
+        <input id="nc-nome" required value="${c?c.nome:''}" placeholder="Razão social da empresa">
+      </div>
+      <div class="form-group">
+        <label>Nome Fantasia</label>
+        <input id="nc-fantasia" value="${c?c.fantasia||'':''}" placeholder="Nome fantasia (opcional)">
+      </div>
+      <div class="form-group">
+        <label>Situação Cadastral</label>
+        <input id="nc-situacao" value="${c?c.situacao||'':''}" placeholder="Ex: Ativa" readonly style="background:var(--gray-50);cursor:default">
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label>Área de Atuação <span style="color:#ef4444">*</span></label>
+        <select id="nc-area" required>
+          ${areas.map(a=>`<option ${c&&c.area===a?'selected':''}>${a}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Telefone</label>
+        <input id="nc-tel" value="${c?c.telefone||'':''}" placeholder="(00) 00000-0000">
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label>Município</label>
+        <input id="nc-municipio" value="${c?c.municipio||'':''}" placeholder="Cidade">
+      </div>
+      <div class="form-group">
+        <label>UF</label>
+        <input id="nc-uf" value="${c?c.uf||'':''}" placeholder="PR" maxlength="2" style="text-transform:uppercase">
+      </div>
+      <div class="form-group">
+        <label>CEP</label>
+        <input id="nc-cep" value="${c?c.cep||'':''}" placeholder="00000-000">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Logradouro / Endereço</label>
+      <input id="nc-endereco" value="${c?c.endereco||'':''}" placeholder="Rua, número, complemento">
+    </div>
+
+    <div class="form-group">
+      <label>Contato (e-mail)</label>
+      <input id="nc-contato" type="email" value="${c?c.contato:''}" placeholder="contato@empresa.com.br">
+    </div>
+
+    <div class="form-group">
+      <label>Produtos/Serviços <span style="font-size:.75rem;color:var(--gray-400)">(separar por vírgula)</span></label>
+      <input id="nc-prod" value="${c?c.produtos.join(', '):''}" placeholder="produto1, produto2...">
+    </div>
+
+    <div class="form-group">
+      <label>Palavras-chave para Matching <span style="font-size:.75rem;color:var(--gray-400)">(separar por vírgula)</span></label>
+      <textarea id="nc-kw" placeholder="palavra1, palavra2...">${c?c.keywords.join(', '):''}</textarea>
+    </div>
+
+    <div class="form-group">
+      <label>CNAE Principal</label>
+      <input id="nc-cnae" value="${c?c.cnae||'':''}" placeholder="Código e descrição do CNAE" readonly style="background:var(--gray-50);cursor:default">
+    </div>
+
+    <div class="form-group">
+      <label>Observações</label>
+      <textarea id="nc-obs">${c?c.obs:''}</textarea>
+    </div>
+
+    <div class="form-actions">
+      <button type="button" class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button type="submit" class="btn btn-primary">${edit?'Salvar Alterações':'Cadastrar'}</button>
+    </div>
   </form>`);
 }
+
+window.mascararCNPJ = function(input) {
+  let v = input.value.replace(/\D/g,'').substring(0,14);
+  v = v.replace(/(\d{2})(\d)/,'$1.$2');
+  v = v.replace(/(\d{2})\.(\d{3})(\d)/,'$1.$2.$3');
+  v = v.replace(/\.(\d{3})(\d)/,'.$1/$2');
+  v = v.replace(/(\d{4})(\d)/,'$1-$2');
+  input.value = v;
+};
+
+window.buscarCNPJ = async function() {
+  const cnpjInput = document.getElementById('nc-cnpj');
+  const statusEl = document.getElementById('cnpj-status');
+  const btn = document.getElementById('btn-buscar-cnpj');
+  if (!cnpjInput || !statusEl) return;
+
+  const cnpj = cnpjInput.value.replace(/\D/g,'');
+  if (cnpj.length !== 14) {
+    statusEl.innerHTML = '<span style="color:#ef4444"><i class="ti ti-alert-circle"></i> CNPJ deve ter 14 dígitos.</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Consultando...';
+  statusEl.innerHTML = '<span style="color:#3b82f6"><i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Buscando dados na Receita Federal...</span>';
+
+  try {
+    // Usa BrasilAPI (HTTPS, CORS liberado, sem chave)
+    const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+    if (!res.ok) throw new Error(`CNPJ não encontrado (status ${res.status})`);
+    const d = await res.json();
+
+    // Preenche Razão Social
+    const nomeEl = document.getElementById('nc-nome');
+    if (nomeEl && d.razao_social) nomeEl.value = d.razao_social;
+
+    // Nome Fantasia
+    const fantasiaEl = document.getElementById('nc-fantasia');
+    if (fantasiaEl && d.nome_fantasia) fantasiaEl.value = d.nome_fantasia;
+
+    // Situação
+    const situacaoEl = document.getElementById('nc-situacao');
+    if (situacaoEl && d.descricao_situacao_cadastral) situacaoEl.value = d.descricao_situacao_cadastral;
+
+    // Telefone
+    const telEl = document.getElementById('nc-tel');
+    if (telEl && d.ddd_telefone_1) telEl.value = d.ddd_telefone_1;
+
+    // Endereço
+    const endEl = document.getElementById('nc-endereco');
+    if (endEl) {
+      const partes = [d.logradouro, d.numero, d.complemento, d.bairro].filter(Boolean);
+      endEl.value = partes.join(', ');
+    }
+    const municipioEl = document.getElementById('nc-municipio');
+    if (municipioEl && d.municipio) municipioEl.value = d.municipio;
+    const ufEl = document.getElementById('nc-uf');
+    if (ufEl && d.uf) ufEl.value = d.uf;
+    const cepEl = document.getElementById('nc-cep');
+    if (cepEl && d.cep) cepEl.value = d.cep.replace(/(\d{5})(\d{3})/,'$1-$2');
+
+    // CNAE
+    const cnaeEl = document.getElementById('nc-cnae');
+    if (cnaeEl && d.cnae_fiscal_descricao) cnaeEl.value = `${d.cnae_fiscal} — ${d.cnae_fiscal_descricao}`;
+
+    // Inferir área de atuação pelo CNAE
+    const areaEl = document.getElementById('nc-area');
+    if (areaEl && d.cnae_fiscal_descricao) {
+      const desc = (d.cnae_fiscal_descricao + ' ' + (d.razao_social||'')).toLowerCase();
+      const areaMap = [
+        { keys:['tecnologia','software','informática','telecomunic','dados','computador','ti ','sistema'], area:'Tecnologia' },
+        { keys:['saúde','médic','hospital','farmac','odontol','enfermagem','clínica','laborat'], area:'Saúde' },
+        { keys:['construção','obras','engenharia','arquitetura','pavimentação','alvenaria'], area:'Construção' },
+        { keys:['alimento','alimentação','merenda','bebida','nutrição','frigorífico','agropec'], area:'Alimentação' },
+        { keys:['vigilância','segurança','monitoramento','proteção'], area:'Segurança' },
+        { keys:['limpeza','conservação','zeladoria','higienização','asseio'], area:'Serviços' }
+      ];
+      for(const am of areaMap){
+        if(am.keys.some(k=>desc.includes(k))){
+          for(let i=0;i<areaEl.options.length;i++){
+            if(areaEl.options[i].value===am.area){areaEl.selectedIndex=i;break;}
+          }
+          break;
+        }
+      }
+    }
+
+    // Gerar keywords automáticas pelo CNAE
+    const kwEl = document.getElementById('nc-kw');
+    if (kwEl && !kwEl.value && d.cnae_fiscal_descricao) {
+      const kwAuto = d.cnae_fiscal_descricao.toLowerCase()
+        .split(/[\s,;\-\/]+/).filter(w=>w.length>3).slice(0,8).join(', ');
+      kwEl.value = kwAuto;
+    }
+
+    const ativo = (d.descricao_situacao_cadastral||'').toLowerCase().includes('ativa');
+    statusEl.innerHTML = `<span style="color:${ativo?'#10b981':'#f59e0b'}"><i class="ti ti-${ativo?'circle-check':'alert-triangle'}"></i>
+      <strong>${d.razao_social}</strong> — Situação: <strong>${d.descricao_situacao_cadastral||'Desconhecida'}</strong>
+      ${d.municipio?`— ${d.municipio}/${d.uf}`:''}
+    </span>`;
+
+  } catch(err) {
+    statusEl.innerHTML = `<span style="color:#ef4444"><i class="ti ti-alert-circle"></i> ${err.message || 'Erro ao consultar CNPJ. Verifique o número e tente novamente.'}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-search"></i> Consultar CNPJ';
+  }
+};
+
 function editarCliente(id){const c=CLIENTES.find(x=>x.id===id);if(c)openNovoCliente(c)}
 function salvarCliente(ev,id){
   ev.preventDefault();
   const cores=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899'];
   const data={
-    nome:$('#nc-nome').value,cnpj:$('#nc-cnpj').value,area:$('#nc-area').value,
+    nome:$('#nc-nome').value,
+    cnpj:$('#nc-cnpj').value,
+    fantasia:$('#nc-fantasia')?$('#nc-fantasia').value:'',
+    situacao:$('#nc-situacao')?$('#nc-situacao').value:'',
+    area:$('#nc-area').value,
+    telefone:$('#nc-tel')?$('#nc-tel').value:'',
+    municipio:$('#nc-municipio')?$('#nc-municipio').value:'',
+    uf:$('#nc-uf')?$('#nc-uf').value:'',
+    cep:$('#nc-cep')?$('#nc-cep').value:'',
+    endereco:$('#nc-endereco')?$('#nc-endereco').value:'',
+    cnae:$('#nc-cnae')?$('#nc-cnae').value:'',
     produtos:$('#nc-prod').value.split(',').map(s=>s.trim()).filter(Boolean),
-    contato:$('#nc-contato').value,obs:$('#nc-obs').value,
+    contato:$('#nc-contato').value,
+    obs:$('#nc-obs').value,
     keywords:$('#nc-kw').value.split(',').map(s=>s.trim()).filter(Boolean),
     editaisAtivos:0,status:'Ativo'
   };

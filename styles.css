@@ -314,3 +314,41 @@ tbody tr{transition:background var(--transition)}
 .auth-settings-panel { display: none; margin-top: 16px; background: var(--gray-50); padding: 16px; border-radius: 12px; border: 1px solid var(--gray-200); }
 .auth-settings-panel.open { display: block; animation: slideDown 0.3s ease; }
 @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ===== PNCP CARDS ===== */
+.pncp-card {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+.pncp-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 4px 16px rgba(24, 95, 165, 0.1);
+  transform: translateY(-1px);
+}
+.pncp-card.pncp-aceito {
+  border-color: var(--success) !important;
+  background: var(--success-light) !important;
+  opacity: 0.9;
+}
+.pncp-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--gray-100);
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes pulseBadge {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.05); }
+}

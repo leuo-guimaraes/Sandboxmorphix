@@ -88,14 +88,18 @@ function renderEditais(){
   app.innerHTML=`
   <div class="page-header"><div><h1>Editais</h1><p>Gerenciamento de editais de licitação</p></div>
     <button class="btn btn-primary" onclick="openNovoEdital()"><i class="ti ti-plus"></i> Novo Edital</button></div>
+
+  ${typeof renderPNCPPanel === 'function' ? renderPNCPPanel() : ''}
+
   <div class="filters">
     <div class="search-box"><i class="ti ti-search"></i><input id="ed-search" placeholder="Buscar por número, órgão ou objeto..." oninput="filterEditais()"></div>
     <select id="ed-mod" onchange="filterEditais()"><option value="">Todas modalidades</option><option>Pregão</option><option>Tomada de Preços</option><option>Concorrência</option><option>RDC</option></select>
   </div>
-  <div class="card"><table><thead><tr><th>Número</th><th>Modalidade</th><th>Órgão</th><th>Valor Est.</th><th>Abertura</th><th>Status</th><th>Match</th><th></th></tr></thead>
+  <div class="card"><table><thead><tr><th>Número</th><th>Modalidade</th><th>Órgão</th><th>Valor Est.</th><th>Abertura</th><th>Status</th><th>Match</th><th>Fonte</th><th></th></tr></thead>
   <tbody id="editais-body"></tbody></table></div>`;
   filterEditais();
 }
+
 function filterEditais(){
   const q=($('#ed-search')?$('#ed-search').value:'').toLowerCase();
   const m=$('#ed-mod')?$('#ed-mod').value:'';
@@ -107,9 +111,14 @@ function filterEditais(){
   const tb=$('#editais-body');if(!tb)return;
   tb.innerHTML=filtered.map(e=>{
     const matches=getMatchesParaClientes(e);
-    return `<tr style="cursor:pointer" onclick="verEdital(${e.id})"><td style="font-weight:600">${e.numero}</td><td><span class="chip chip-gray">${e.modalidade}</span></td>
+    const isPNCP = !!e.pncp_id;
+    const fonteBadge = isPNCP
+      ? `<span class="chip chip-blue" style="font-size:.62rem;gap:3px"><i class="ti ti-building-community" style="font-size:.6rem"></i> PNCP</span>`
+      : `<span class="chip chip-gray" style="font-size:.62rem">Manual</span>`;
+    return `<tr style="cursor:pointer" onclick="verEdital(${e.id})"><td style="font-weight:600;font-size:.78rem">${e.numero}</td><td><span class="chip chip-gray">${e.modalidade}</span></td>
     <td>${e.orgao}</td><td>${fmt(e.valorEstimado)}</td><td>${fmtDate(e.dataAbertura)}</td><td>${statusChip(e.status)}</td>
     <td>${matches.map(m=>`<span class="chip chip-blue" style="margin:1px" title="Produtos: ${(m.produtosMatch||[]).join(', ')}">${m.nome.split(' ')[0]} ${m.match}%</span>`).join('')||'—'}</td>
+    <td>${fonteBadge}${isPNCP && e.url_edital ? `<a href="${e.url_edital}" target="_blank" onclick="event.stopPropagation()" class="btn btn-sm btn-outline" style="margin-left:4px;padding:3px 7px;font-size:.62rem" title="Ver no PNCP"><i class="ti ti-external-link"></i></a>` : ''}</td>
     <td onclick="event.stopPropagation()">
       <button class="btn btn-sm btn-outline" style="color:var(--danger);border-color:var(--danger-light);padding:4px 8px" onclick="excluirEdital('${e.id}')" title="Excluir Edital">
         <i class="ti ti-trash"></i>
@@ -117,6 +126,7 @@ function filterEditais(){
     </td></tr>`;
   }).join('');
 }
+
 
 window.excluirEdital = async function(id) {
   if(!confirm("Tem certeza que deseja excluir este edital? Esta ação não pode ser desfeita.")) return;
