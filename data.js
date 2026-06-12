@@ -39,6 +39,7 @@ let EDITAIS = [];
 let PIPELINE = [];
 let EVENTOS = [];
 let ALERTAS = [];
+let EDITAL_CLIENTES = [];
 let RELATORIOS = {
   taxaVitoria: 0,
   editaisParticipados: 0,

@@ -184,6 +184,41 @@ async function dbGetEditalClientes(editalId) {
   return Array.from(mapa.values());
 }
 
+async function dbGetAllEditalClientes() {
+  let nuvem = [];
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.from('edital_clientes').select('*');
+      if (!error && data) nuvem = data;
+    } catch(e){}
+  }
+  const local = getLocalFallback('edital_clientes');
+  const mapa = new Map();
+  local.forEach(item => mapa.set(item.id, item));
+  nuvem.forEach(item => mapa.set(item.id, item));
+  return Array.from(mapa.values());
+}
+
+async function dbGetClienteEditais(clienteId) {
+  let nuvem = [];
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.from('edital_clientes').select('*, editais(*)').eq('cliente_id', clienteId);
+      if (!error && data) nuvem = data;
+    } catch(e){}
+  }
+  const local = getLocalFallback('edital_clientes').filter(ec => String(ec.cliente_id) === String(clienteId));
+  const localWithEditais = local.map(ec => {
+    const editalObj = (typeof EDITAIS !== 'undefined' ? EDITAIS : []).find(ed => String(ed.id) === String(ec.edital_id));
+    return { ...ec, editais: editalObj };
+  });
+
+  const mapa = new Map();
+  localWithEditais.forEach(item => mapa.set(item.id, item));
+  nuvem.forEach(item => mapa.set(item.id, item));
+  return Array.from(mapa.values());
+}
+
 async function dbGetRpaTasks() { 
   let nuvem = [];
   try { nuvem = await dbSelect('rpa_tasks'); } catch(e) {}

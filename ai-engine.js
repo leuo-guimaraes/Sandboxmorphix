@@ -204,7 +204,99 @@ async function runAIAnalysis(fileOrFiles,provider,useOcr=true){
   const config=getAIConfig();
   const key=provider==='openai'?config.openai_key:config.claude_key;
   if(!key){
-    throw new Error(`Chave de API ${provider==='openai'?'OpenAI':'Claude'} não configurada. Vá em Config IA para adicionar.`);
+    const progress=createProgressUI('ai-progress-container');
+    if(progress) {
+      progress.setStep(0);
+      progress.setProgress(10, 'Modo de teste: Analisando documentos do edital...');
+      await sleep(500);
+      progress.setStep(1);
+      progress.setProgress(40, 'Modo de teste: Extraindo texto e termos do edital...');
+      await sleep(500);
+      progress.setStep(2);
+      progress.setProgress(70, 'Modo de teste: Processando com IA Simulada...');
+      await sleep(600);
+      progress.setStep(3);
+      progress.setProgress(90, 'Modo de teste: Estruturando relatório final...');
+      await sleep(400);
+      progress.setStep(4);
+      progress.setProgress(100, 'Análise simulada concluída!');
+    }
+
+    let textContent = '';
+    let fileName = 'Edital.pdf';
+    let editalId = undefined;
+    
+    if (fileOrFiles && fileOrFiles.isText) {
+      textContent = fileOrFiles.content || '';
+      fileName = fileOrFiles.name || 'Edital';
+      editalId = fileOrFiles.editalId;
+    } else if (fileOrFiles) {
+      let filesList = [];
+      if (fileOrFiles instanceof FileList || Array.isArray(fileOrFiles)) {
+        filesList = Array.from(fileOrFiles);
+      } else {
+        filesList = [fileOrFiles];
+      }
+      if (filesList.length > 0) {
+        fileName = filesList.map(f => f.name).join(', ');
+        textContent = `Arquivo de Edital: ${fileName}`;
+      }
+    }
+
+    let num='PE-2026/0120', mod='Pregão', org='Prefeitura Municipal', val='R$ 1.850.000,00';
+    if (textContent) {
+      const mNum = textContent.match(/Número[^:\n]*:\s*([^\n]+)/i); if(mNum) num=mNum[1].trim();
+      const mMod = textContent.match(/Modalidade[^:\n]*:\s*([^\n]+)/i); if(mMod) mod=mMod[1].trim();
+      const mOrg = textContent.match(/Órgão[^:\n]*:\s*([^\n]+)/i); if(mOrg) org=mOrg[1].trim();
+      const mVal = textContent.match(/Valor[^:\n]*:\s*([^\n]+)/i); if(mVal) val=mVal[1].trim();
+    }
+
+    if (val && !val.includes('R$') && !isNaN(parseFloat(val.replace(/[^\d.-]/g, '')))) {
+      const numVal = parseFloat(val.replace(/[^\d.-]/g, ''));
+      val = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numVal);
+    }
+
+    const mockResponse = `[⚠️ ANÁLISE SIMULADA - MODO DE TESTE SEM CHAVE DE API]
+
+### 1. **RESUMO DO OBJETO**
+Este edital tem por objeto a contratação/aquisição simulada correspondente a:
+"${textContent.substring(0, 300)}${textContent.length > 300 ? '...' : ''}"
+O projeto visa atender às especificações e demandas descritas no termo de referência do edital.
+
+### 2. **INFORMAÇÕES DO PROCESSO**
+- Modalidade: ${mod}
+- Número do edital: ${num}
+- Órgão/Entidade: ${org}
+- Valor estimado: ${val}
+- Data de abertura: 2026-06-30
+- Data limite (Proposta): 2026-06-29
+- Plataforma de disputa: Compras.gov.br (PNCP)
+
+### 3. **PONTOS DE ATENÇÃO**
+- ✅ **OK** - Cronograma de entrega em lotes.
+- ⚠️ **ATENÇÃO** - Exigência de comprovação de regularidade fiscal e trabalhista atualizadas na fase de habilitação.
+- 🔴 **CRÍTICO** - Prazo exíguo de 48 horas para envio de amostras após a convocação do arrematante.
+
+### 4. **CHECKLIST DE HABILITAÇÃO**
+- **Documentos Jurídicos**: Contrato social consolidado e certidão simplificada da Junta Comercial. (Obrigatório)
+- **Documentos Fiscais/Trabalhistas**: CND Federal, CND Estadual, CND Municipal, CRF FGTS e CNDT Trabalhista. (Obrigatório)
+- **Qualificação Econômico-Financeira**: Balanço Patrimonial do último exercício e certidão negativa de falência ou recuperação judicial. (Obrigatório)
+- **Qualificação Técnica**: Atestado de capacidade técnica fornecido por pessoa jurídica de direito público ou privado que comprove aptidão de pelo menos 50% dos quantitativos. (Obrigatório)
+
+### 5. **PALAVRAS-CHAVE**
+Licitação, PNCP, Compras Governamentais, Gestão de Editais, Aquisição de Bens.
+
+### 6. **RECOMENDAÇÕES**
+- Separar toda a documentação de habilitação com antecedência.
+- Verificar a validade de todas as certidões negativas antes do início da sessão pública.
+- Analisar os custos detalhadamente para formular uma proposta de preço competitiva com margem de lucro segura.`;
+
+    return {
+      text: textContent || `Texto simulado para ${fileName}`,
+      response: mockResponse,
+      provider: provider + ' (Simulado)',
+      editalId: editalId
+    };
   }
 
   const progress=createProgressUI('ai-progress-container');

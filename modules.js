@@ -112,7 +112,7 @@ function filterCRM(){
     <td><div style="font-weight:600">${c.nome}</div><div style="font-size:.7rem;color:var(--gray-400)">${c.cnpj}</div></td>
     <td><span class="chip" style="background:${c.cor}20;color:${c.cor}">${c.area}</span></td>
     <td><div style="display:flex;flex-wrap:wrap;gap:3px">${c.produtos.map(p=>`<span class="chip chip-gray">${p}</span>`).join('')}</div></td>
-    <td style="font-weight:600;text-align:center">${c.editaisAtivos}</td>
+    <td style="font-weight:600;text-align:center">${(typeof EDITAL_CLIENTES !== 'undefined') ? EDITAL_CLIENTES.filter(ec => String(ec.cliente_id) === String(c.id)).length : c.editaisAtivos}</td>
     <td><span class="chip ${c.status==='Ativo'?'chip-green':'chip-red'}">${c.status}</span></td>
     <td>
       <button class="btn btn-sm btn-outline" onclick="verCliente(${c.id})"><i class="ti ti-eye"></i></button>
@@ -153,6 +153,38 @@ function verCliente(id){
       <p style="color:var(--gray-400);font-size:.8rem">Nenhum edital vinculado localmente ainda.<br>Clique em "Vincular Novo Edital" para preparar uma proposta.</p>
     </div>
   `);
+
+  // Trigger async load of linked editais
+  setTimeout(async () => {
+    const listEl = document.getElementById('lista-vinculados');
+    if (!listEl) return;
+    listEl.innerHTML = `<div style="color:var(--primary);font-size:.8rem"><i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Carregando editais vinculados...</div>`;
+    
+    try {
+      const vinculados = await dbGetClienteEditais(id);
+      if (vinculados && vinculados.length > 0) {
+        listEl.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">` + 
+          vinculados.map(v => {
+            const ed = v.editais || EDITAIS.find(e => String(e.id) === String(v.edital_id));
+            if (!ed) return '';
+            return `
+              <div class="card" style="margin:0;padding:12px;border:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:center;background:#f8fafc">
+                <div style="flex:1;min-width:0;padding-right:12px">
+                  <div style="font-weight:700;font-size:.82rem;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ed.numero} — ${ed.orgao}</div>
+                  <div style="font-size:.74rem;color:var(--gray-500);margin-top:3px">${ed.modalidade} • <strong>${fmt(ed.valorEstimado || ed.valor_estimado || 0)}</strong></div>
+                </div>
+                <button class="btn btn-sm btn-outline" style="color:var(--danger);border-color:var(--danger-light);padding:4px 8px;flex-shrink:0" onclick="desvincularEditalCliente('${v.id}', ${id})" title="Remover Vínculo">
+                  <i class="ti ti-trash"></i>
+                </button>
+              </div>`;
+          }).join('') + `</div>`;
+      } else {
+        listEl.innerHTML = `<p style="color:var(--gray-400);font-size:.8rem">Nenhum edital vinculado localmente ainda.<br>Clique em "Vincular Novo Edital" para preparar uma proposta.</p>`;
+      }
+    } catch(err) {
+      listEl.innerHTML = `<p style="color:var(--danger);font-size:.8rem">Erro ao carregar editais vinculados.</p>`;
+    }
+  }, 50);
 }
 
 function abrirVincularEdital(clienteId) {
@@ -180,9 +212,19 @@ async function vincularEEnviar(clienteId) {
   
   // Salvar vínculo no banco (se configurado)
   try {
-    await dbVincularCliente(editalId, clienteId);
+    const salvo = await dbVincularCliente(editalId, clienteId);
+    if (salvo && typeof EDITAL_CLIENTES !== 'undefined') {
+      if (!EDITAL_CLIENTES.some(ec => String(ec.edital_id) === String(editalId) && String(ec.cliente_id) === String(clienteId))) {
+        EDITAL_CLIENTES.push(salvo);
+      }
+    }
   } catch(err) {
     console.log('Sem Supabase configurado, usando apenas UI local', err);
+    if (typeof EDITAL_CLIENTES !== 'undefined') {
+      if (!EDITAL_CLIENTES.some(ec => String(ec.edital_id) === String(editalId) && String(ec.cliente_id) === String(clienteId))) {
+        EDITAL_CLIENTES.push({ id: Date.now().toString(), edital_id: editalId, cliente_id: clienteId });
+      }
+    }
   }
   
   const subject = encodeURIComponent(`Proposta de Licitação — ${e.numero}`);
@@ -207,7 +249,25 @@ Equipe Sandbox Morphix`);
   
   alert('Edital vinculado! O seu cliente de email padrão foi aberto com o rascunho da proposta.');
   verCliente(clienteId);
+  if (typeof filterCRM === 'function') filterCRM();
 }
+
+window.desvincularEditalCliente = async function(vinculoId, clienteId) {
+  if(!confirm("Remover o vínculo deste edital com o cliente?")) return;
+  try {
+    if(typeof dbDelete === 'function') {
+      await dbDelete('edital_clientes', vinculoId);
+    }
+  } catch(e) {
+    console.warn("Aviso ao desvincular no Supabase", e);
+  }
+  if (typeof EDITAL_CLIENTES !== 'undefined') {
+    EDITAL_CLIENTES = EDITAL_CLIENTES.filter(ec => String(ec.id) !== String(vinculoId));
+  }
+  // Refresh client detail modal and CRM table count
+  verCliente(clienteId);
+  if (typeof filterCRM === 'function') filterCRM();
+};
 
 function openNovoCliente(c){
   const edit=!!c;const title=edit?'Editar Cliente':'Novo Cliente';

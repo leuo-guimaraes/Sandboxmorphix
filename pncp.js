@@ -7,6 +7,9 @@ const PNCP_BASE = 'https://pncp.gov.br/api/consulta/v1';
 // Estado local dos editais pendentes encontrados na busca
 let PNCP_PENDENTES = [];
 let PNCP_IGNORADOS = new Set();
+// Cache para passar objetos complexos via onclick (evita JSON no atributo HTML)
+const PNCP_CACHE = new Map();
+let _pncpCacheIdx = 0;
 
 // Mapeamento de modalidades PNCP
 const PNCP_MODALIDADES = {
@@ -380,7 +383,7 @@ function renderPNCPCard(item) {
 
     <!-- Ações -->
     <div style="display:flex;gap:8px;border-top:1px solid var(--gray-100);padding-top:10px">
-      <button class="btn btn-success btn-sm" style="flex:1;justify-content:center" onclick="aceitarEditalPNCP(${JSON.stringify(item).replace(/'/g,"&#39;")})">
+      <button class="btn btn-success btn-sm" style="flex:1;justify-content:center" onclick="aceitarEditalPNCP(_pncpIdx_${key.replace(/[^a-z0-9]/gi,'_')})">
         <i class="ti ti-check"></i> Aceitar
       </button>
       <a href="${linkOrigem}" target="_blank" class="btn btn-outline btn-sm" title="Ver no PNCP" style="padding:5px 10px">
@@ -390,13 +393,19 @@ function renderPNCPCard(item) {
         <i class="ti ti-x"></i>
       </button>
     </div>
-  </div>`;
+  </div>
+  <script>window._pncpIdx_${key.replace(/[^a-z0-9]/gi,'_')} = ${++_pncpCacheIdx}; PNCP_CACHE.set(${_pncpCacheIdx}, ${JSON.stringify(item).replace(/<\/script>/gi,'<\/scr"+"ipt>')});<\/script>`;
 }
 
 // ===== ACEITAR EDITAL =====
-window.aceitarEditalPNCP = function(item) {
-  if (typeof item === 'string') {
-    try { item = JSON.parse(item); } catch(e) { return; }
+// Recebe um índice numérico do PNCP_CACHE (evita passar JSON via onclick)
+window.aceitarEditalPNCP = function(idxOuItem) {
+  let item = idxOuItem;
+  if (typeof idxOuItem === 'number') {
+    item = PNCP_CACHE.get(idxOuItem);
+    if (!item) { console.error('[PNCP] item não encontrado no cache:', idxOuItem); return; }
+  } else if (typeof idxOuItem === 'string') {
+    try { item = JSON.parse(idxOuItem); } catch(e) { return; }
   }
 
   const key = item.numeroControlePNCP || String(item.sequencialCompra);
@@ -407,11 +416,13 @@ window.aceitarEditalPNCP = function(item) {
   const dataAbertura = (item.dataAberturaProposta || item.dataPublicacaoPncp || '').slice(0, 10);
   const linkOrigem = item.linkSistemaOrigem || `https://pncp.gov.br/app/editais/${key}`;
 
-  // Extrair keywords do objeto automaticamente
-  const keywords = objeto.toLowerCase()
-    .split(/[\s,;.\-\/\(\)]+/)
-    .filter(w => w.length > 3)
-    .slice(0, 15);
+  // Extrair keywords do objeto + órgão automaticamente (melhora o matching)
+  const textoBase = (objeto + ' ' + orgao).toLowerCase();
+  const keywords = [...new Set(
+    textoBase.split(/[\s,;.\-\/\(\)]+/)
+      .filter(w => w.length > 3)
+      .slice(0, 20)
+  )];
 
   // Normalizar modalidade para o sistema local
   const modalMap = {
@@ -457,12 +468,53 @@ window.aceitarEditalPNCP = function(item) {
       ai_analysis: '',
       ai_provider: '',
       pdf_text: ''
-    }).then(saved => {
+    }).then(async saved => {
       if (saved?.id) {
         novoEdital.id = saved.id;
         dbAddToPipeline(saved.id, 'prospeccao', 'media').catch(() => {});
+        
+        // VINCULAR CLIENTES COM MATCH AUTOMATICAMENTE
+        const palavrasObj = objeto.toLowerCase().split(/[\s,;.]+/).filter(w => w.length > 3);
+        const matchClientes = (typeof CLIENTES !== 'undefined' ? CLIENTES : []).filter(c =>
+          c.keywords && c.keywords.some(k => palavrasObj.some(p => p.includes(k.toLowerCase()) || k.toLowerCase().includes(p)))
+        ).slice(0, 3);
+        
+        for (const c of matchClientes) {
+          try {
+            const vinculo = await dbVincularCliente(saved.id, c.id);
+            if (vinculo && typeof EDITAL_CLIENTES !== 'undefined') {
+              if (!EDITAL_CLIENTES.some(ec => String(ec.edital_id) === String(saved.id) && String(ec.cliente_id) === String(c.id))) {
+                EDITAL_CLIENTES.push(vinculo);
+              }
+            }
+          } catch (err) {
+            console.error('[PNCP] Erro ao vincular cliente automático:', err);
+          }
+        }
+        
+        if (typeof filterCRM === 'function') filterCRM();
       }
     }).catch(() => {});
+  } else {
+    // FALLBACK SE SUPABASE NÃO ESTIVER DISPONÍVEL (SALVAR EM FALLBACK LOCAL)
+    const palavrasObj = objeto.toLowerCase().split(/[\s,;.]+/).filter(w => w.length > 3);
+    const matchClientes = (typeof CLIENTES !== 'undefined' ? CLIENTES : []).filter(c =>
+      c.keywords && c.keywords.some(k => palavrasObj.some(p => p.includes(k.toLowerCase()) || k.toLowerCase().includes(p)))
+    ).slice(0, 3);
+    
+    matchClientes.forEach(c => {
+      if (typeof dbVincularCliente === 'function') {
+        dbVincularCliente(novoEdital.id, c.id).then(vinculo => {
+          if (vinculo && typeof EDITAL_CLIENTES !== 'undefined') {
+            if (!EDITAL_CLIENTES.some(ec => String(ec.edital_id) === String(novoEdital.id) && String(ec.cliente_id) === String(c.id))) {
+              EDITAL_CLIENTES.push(vinculo);
+            }
+          }
+        }).catch(() => {});
+      }
+    });
+    
+    if (typeof filterCRM === 'function') filterCRM();
   }
 
   // Atualizar card visualmente
@@ -491,6 +543,9 @@ window.aceitarEditalPNCP = function(item) {
   }
 
   atualizarBadgePNCP();
+
+  // Atualizar a tabela de editais imediatamente (se visível)
+  if (typeof filterEditais === 'function') filterEditais();
 
   // Notificação toast
   mostrarToastPNCP(`✅ Edital adicionado! ${orgao.substring(0, 40)}...`);

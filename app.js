@@ -430,10 +430,10 @@ window.selecionarEditalExistente = function(id) {
   if(!ed) return;
   
   if(ed.ai_analysis) {
-    displayAIResult({ response: ed.ai_analysis, provider: ed.ai_provider || 'openai' });
+    displayAIResult({ response: ed.ai_analysis, provider: ed.ai_provider || 'openai', editalId: ed.id });
   } else {
     const textToAnalyze = ed.pdf_text || `Número: ${ed.numero}\nModalidade: ${ed.modalidade}\nÓrgão: ${ed.orgao}\nValor Estimado: R$ ${ed.valorEstimado}\nObjeto: ${ed.objeto}`;
-    lastAnalysisFile = { name: `Edital ${ed.numero}.txt`, isText: true, content: textToAnalyze };
+    lastAnalysisFile = { name: `Edital ${ed.numero}.txt`, isText: true, content: textToAnalyze, editalId: ed.id };
     const label = document.getElementById('file-label');
     if(label) label.textContent = `Edital Selecionado: ${ed.numero} — ${ed.orgao}`;
     const btn = document.getElementById('btn-analyze');
@@ -494,8 +494,8 @@ async function startAnalysis(){
 async function displayAIResult(result){
   const resultEl=document.getElementById('ia-result');
   if(!resultEl)return;
-  const providerLabel=result.provider==='openai'?'OpenAI':'Claude';
-  const providerColor=result.provider==='openai'?'#10a37f':'#d47838';
+  const providerLabel=result.provider.includes('openai')?'OpenAI':'Claude';
+  const providerColor=result.provider.includes('openai')?'#10a37f':'#d47838';
 
   // Extract info from markdown to save to DB
   let num='Sem número', mod='Desconhecida', org='Desconhecido', val=0;
@@ -504,14 +504,30 @@ async function displayAIResult(result){
   const mMod = t.match(/Modalidade[^:]*:\s*(.+)/i); if(mMod) mod=mMod[1].trim();
   const mOrg = t.match(/Órgão[^:]*:\s*(.+)/i); if(mOrg) org=mOrg[1].trim();
   const mVal = t.match(/Valor[^:]*:\s*R?\$\s*([\d.,]+)/i); 
-  if(mVal) val = parseFloat(mVal[1].replace(/\./g,'').replace(',','.'));
+  if(mVal) {
+    const rawVal = mVal[1].trim();
+    if(rawVal.includes(',') && rawVal.includes('.')) {
+      val = parseFloat(rawVal.replace(/\./g,'').replace(',','.'));
+    } else if(rawVal.includes(',')) {
+      val = parseFloat(rawVal.replace(',','.'));
+    } else {
+      val = parseFloat(rawVal);
+    }
+  }
+
+  const editalId = result.editalId || '';
+  
+  // Cache variables to prevent HTML escaping issues
+  window._lastAIAnalysisResponse = result.response;
+  window._lastAIAnalysisProvider = result.provider;
+  window._lastAIAnalysisEditalId = editalId;
 
   resultEl.innerHTML=`
   <div class="card" style="margin-top:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <div class="section-title" style="margin:0"><i class="ti ti-sparkles"></i> Resultado da Análise</div>
       <div style="display:flex;align-items:center;gap:8px">
-        <span class="chip" style="background:${providerColor}20;color:${providerColor}"><i class="ti ti-${result.provider==='openai'?'brand-openai':'brain'}" style="font-size:.7rem"></i> ${providerLabel}</span>
+        <span class="chip" style="background:${providerColor}20;color:${providerColor}"><i class="ti ti-${result.provider.includes('openai')?'brand-openai':'brain'}" style="font-size:.7rem"></i> ${providerLabel}</span>
         <span class="chip chip-gray">${lastAnalysisFile?lastAnalysisFile.name:''}</span>
       </div>
     </div>
@@ -519,23 +535,38 @@ async function displayAIResult(result){
     
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:center">
       <div style="font-size:.8rem;color:var(--gray-600)"><i class="ti ti-info-circle"></i> O edital será salvo automaticamente no Supabase e movido para o Pipeline.</div>
-      <button class="btn btn-primary" onclick="salvarEditalIA('${num}', '${mod}', '${org}', ${val}, \`${result.response.replace(/`/g, '')}\`, '${result.provider}')">
+      <button class="btn btn-primary" onclick="salvarEditalIACached('${num}', '${mod}', '${org}', ${val})">
         <i class="ti ti-device-floppy"></i> Salvar no Pipeline
       </button>
     </div>
   </div>`;
 }
 
-window.salvarEditalIA = async function(num, mod, org, val, analysis, provider) {
+window.salvarEditalIACached = function(num, mod, org, val) {
+  const analysis = window._lastAIAnalysisResponse || '';
+  const provider = window._lastAIAnalysisProvider || 'openai';
+  const editalId = window._lastAIAnalysisEditalId || '';
+  salvarEditalIA(num, mod, org, val, analysis, provider, editalId);
+};
+
+window.salvarEditalIA = async function(num, mod, org, val, analysis, provider, editalId) {
   try {
-    const btn = event.currentTarget;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="ti ti-loader"></i> Salvando...';
+    const btn = event ? event.currentTarget : null;
+    if(btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="ti ti-loader"></i> Salvando...';
+    }
     
-    // Save to Supabase
-    const savedEdital = await dbSaveEdital({
+    const modalMap = {
+      'Pregão': 'Pregão', 'Concorrência': 'Concorrência', 'RDC': 'RDC',
+      'Tomada de Preços': 'Tomada de Preços', 'Leilão': 'RDC', 'Dispensa': 'Pregão',
+      'Inexigibilidade': 'Pregão', 'Concurso': 'Concorrência'
+    };
+    const modalLocal = Object.keys(modalMap).find(k => mod.includes(k)) || 'Pregão';
+    
+    const editalData = {
       numero: num,
-      modalidade: mod,
+      modalidade: modalLocal,
       orgao: org,
       valor_estimado: val || 0,
       data_abertura: new Date().toISOString().split('T')[0], // Hoje fallback
@@ -545,33 +576,62 @@ window.salvarEditalIA = async function(num, mod, org, val, analysis, provider) {
       keywords: [],
       ai_analysis: analysis,
       ai_provider: provider
-    });
+    };
+    
+    if(editalId) {
+      editalData.id = editalId;
+      const existing = EDITAIS.find(x => String(x.id) === String(editalId));
+      if (existing) {
+        editalData.data_abertura = existing.dataAbertura || existing.data_abertura || editalData.data_abertura;
+        editalData.status = existing.status || editalData.status;
+        editalData.objeto = existing.objeto || editalData.objeto;
+        editalData.plataforma = existing.plataforma || editalData.plataforma;
+        editalData.keywords = existing.keywords || editalData.keywords;
+        editalData.url_edital = existing.url_edital || existing.url || '';
+        editalData.pncp_id = existing.pncp_id || '';
+      }
+    }
+    
+    const savedEdital = await dbSaveEdital(editalData);
     
     if(savedEdital && savedEdital.id) {
-      await dbAddToPipeline(savedEdital.id, 'prospeccao', 'media');
-      
-      // Atualiza a interface local para aparecer imediatamente
-      EDITAIS.push({
-        id: savedEdital.id, numero: num, modalidade: mod, orgao: org,
-        valorEstimado: val || 0, dataAbertura: new Date().toISOString().split('T')[0],
-        status: 'Aberto', objeto: 'Extraído via IA', plataforma: 'N/A', keywords: []
-      });
-      if(typeof PIPELINE !== 'undefined') {
-        PIPELINE.push({editalId: savedEdital.id, coluna: 'prospeccao', prioridade: 'media'});
+      if(!editalId) {
+        await dbAddToPipeline(savedEdital.id, 'prospeccao', 'media');
+        
+        EDITAIS.push({
+          id: savedEdital.id, numero: num, modalidade: modalLocal, orgao: org,
+          valorEstimado: val || 0, dataAbertura: new Date().toISOString().split('T')[0],
+          status: 'Aberto', objeto: 'Extraído via IA', plataforma: 'N/A', keywords: []
+        });
+        if(typeof PIPELINE !== 'undefined') {
+          PIPELINE.push({editalId: savedEdital.id, coluna: 'prospeccao', prioridade: 'media'});
+        }
+      } else {
+        const idx = EDITAIS.findIndex(x => String(x.id) === String(editalId));
+        if (idx >= 0) {
+          EDITAIS[idx].ai_analysis = analysis;
+          EDITAIS[idx].ai_provider = provider;
+          EDITAIS[idx].numero = num;
+          EDITAIS[idx].modalidade = modalLocal;
+          EDITAIS[idx].orgao = org;
+          EDITAIS[idx].valorEstimado = val || EDITAIS[idx].valorEstimado;
+        }
       }
       
-      alert('Edital salvo com sucesso no banco e adicionado ao Pipeline!');
+      alert(editalId ? 'Análise do edital atualizada com sucesso!' : 'Edital salvo com sucesso no banco e adicionado ao Pipeline!');
       navigateTo('kanban');
     } else {
       throw new Error('Falha ao salvar edital');
     }
   } catch (e) {
     alert('Erro ao salvar no banco: ' + e.message);
-    const btn = event.currentTarget;
-    btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-device-floppy"></i> Tentar Novamente';
+    const btn = event ? event.currentTarget : null;
+    if(btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ti ti-device-floppy"></i> Tentar Novamente';
+    }
   }
-}
+};
 
 window.parseEditalFromMarkdown = function(md) {
   if(typeof md === 'object' && md !== null) {
@@ -1106,6 +1166,7 @@ async function loadSupabaseData() {
   EDITAIS = await dbGetEditais() || [];
   CLIENTES = await dbGetClientes() || [];
   PIPELINE = await dbGetPipeline() || [];
+  EDITAL_CLIENTES = await dbGetAllEditalClientes() || [];
   if (typeof computeRelatorios === 'function') computeRelatorios();
   if (typeof computeAlertas === 'function') computeAlertas();
 }
