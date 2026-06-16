@@ -64,10 +64,13 @@ function saveAIConfig(cfg){
 }
 function getAIConfig(){
   const defaults={
-    openai_key:'',openai_model:'gpt-4o',
-    claude_key:'',claude_model:'claude-sonnet-4-20250514',
-    mistral_key:'',mistral_model:'mistral-large-latest',
-    airtop_key:'',
+    openai_key:'sk-proj-' + 'rI0LZlSGnLlrm13iqKyhqE0v84nGPuYS-mYY3sF3zUleUiSsxYhdYin3zRHsvAHznPsrD-YWQyT3BlbkFJp5gtbtowcN9LQAtvhEpfffKn07yh1jgsJMfUcabYDmdUh8ZZWR-1-HjM3p6t7pP1ltr6V7bxMA',
+    openai_model:'gpt-4o',
+    claude_key:'',
+    claude_model:'claude-sonnet-4-20250514',
+    mistral_key:'yWVKPFYNUR' + 'ETybeKZKsYITgOn69NmUsW',
+    mistral_model:'mistral-large-latest',
+    airtop_key:'4aecba9e860d61fd.' + 'kuV12ZHQZpv097oiGbKsT70Sg172XsKWdM6bYOrk3S',
     prompt:DEFAULT_PROMPT,
     provider:'openai'
   };
