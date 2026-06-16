@@ -43,6 +43,24 @@ function loadAIConfig(){
 }
 function saveAIConfig(cfg){
   localStorage.setItem(AI_CONFIG_KEY,JSON.stringify(cfg));
+  
+  // Update APIs for the currently logged in user so they sync
+  if (typeof userLogado !== 'undefined' && userLogado) {
+    if (!userLogado.apis) userLogado.apis = {};
+    if (cfg.openai_key !== undefined) userLogado.apis.openai_key = cfg.openai_key;
+    if (cfg.claude_key !== undefined) userLogado.apis.claude_key = cfg.claude_key;
+    if (cfg.mistral_key !== undefined) userLogado.apis.mistral_key = cfg.mistral_key;
+    if (cfg.airtop_key !== undefined) userLogado.apis.airtop_key = cfg.airtop_key;
+    
+    if (typeof USUARIOS_SISTEMA !== 'undefined') {
+      const uIndex = USUARIOS_SISTEMA.findIndex(u => u.id === userLogado.id);
+      if (uIndex >= 0) {
+        USUARIOS_SISTEMA[uIndex].apis = userLogado.apis;
+        try { localStorage.setItem('licitapro_usuarios', JSON.stringify(USUARIOS_SISTEMA)); } catch(e){}
+      }
+    }
+    try { localStorage.setItem('licitapro_user_logado', JSON.stringify(userLogado)); } catch(e){}
+  }
 }
 function getAIConfig(){
   const defaults={
@@ -53,7 +71,17 @@ function getAIConfig(){
     prompt:DEFAULT_PROMPT,
     provider:'openai'
   };
-  return{...defaults,...loadAIConfig()};
+  let cfg = {...defaults,...loadAIConfig()};
+  
+  // Use APIs tied to the user if they are set
+  if (typeof userLogado !== 'undefined' && userLogado && userLogado.apis) {
+    if (userLogado.apis.openai_key) cfg.openai_key = userLogado.apis.openai_key;
+    if (userLogado.apis.claude_key) cfg.claude_key = userLogado.apis.claude_key;
+    if (userLogado.apis.mistral_key) cfg.mistral_key = userLogado.apis.mistral_key;
+    if (userLogado.apis.airtop_key) cfg.airtop_key = userLogado.apis.airtop_key;
+  }
+  
+  return cfg;
 }
 
 // ===== PDF TEXT EXTRACTION + OCR FALLBACK =====
@@ -390,9 +418,19 @@ Licitação, PNCP, Compras Governamentais, Gestão de Editais, Aquisição de Be
 
   let response;
   try{
-    if(provider==='openai'){response=await callOpenAI(pdfText,config)}
-    else if(provider==='claude'){response=await callClaude(pdfText,config)}
-    else{response=await callMistral(pdfText,config)}
+    if (typeof supabaseClient !== 'undefined' && supabaseClient) {
+      const { data, error } = await supabaseClient.functions.invoke('analyze-edital', {
+        body: { text: pdfText, provider, config }
+      });
+      if (error) throw new Error(`Erro na Edge Function: ${error.message}`);
+      if (data.error) throw new Error(`Erro no Backend: ${data.error}`);
+      response = data.response;
+    } else {
+      // Fallback local se o Supabase não estiver configurado
+      if(provider==='openai'){response=await callOpenAI(pdfText,config)}
+      else if(provider==='claude'){response=await callClaude(pdfText,config)}
+      else{response=await callMistral(pdfText,config)}
+    }
   }catch(e){throw e}
 
   // Step 4: Done

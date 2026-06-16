@@ -1614,6 +1614,26 @@ window.openNovoUsuario = function() {
         <option value="admin">Administrador (Acesso Total)</option>
       </select>
     </div>
+    <div class="section-title" style="margin-top:16px; border-bottom:1px solid var(--gray-200); padding-bottom:8px;"><i class="ti ti-api-app"></i> APIs Vinculadas (Opcional)</div>
+    <p style="font-size:0.75rem; color:var(--gray-500); margin-bottom:12px;">As chaves preenchidas aqui ficarão vinculadas a este usuário em qualquer dispositivo que ele acessar.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label style="font-size:0.8rem;">OpenAI API Key</label>
+        <input id="usr-api-openai" type="password" placeholder="sk-...">
+      </div>
+      <div class="form-group">
+        <label style="font-size:0.8rem;">Claude API Key</label>
+        <input id="usr-api-claude" type="password" placeholder="sk-ant-...">
+      </div>
+      <div class="form-group">
+        <label style="font-size:0.8rem;">Mistral API Key</label>
+        <input id="usr-api-mistral" type="password" placeholder="...">
+      </div>
+      <div class="form-group">
+        <label style="font-size:0.8rem;">Airtop API Key</label>
+        <input id="usr-api-airtop" type="password" placeholder="sk-...">
+      </div>
+    </div>
     <div class="form-actions">
       <button type="button" class="btn btn-outline" onclick="closeModal()">Cancelar</button>
       <button type="submit" class="btn btn-primary"><i class="ti ti-check"></i> Cadastrar Usuário</button>
@@ -1629,7 +1649,13 @@ window.salvarUsuario = function(ev) {
     email: document.getElementById('usr-email').value,
     senha: document.getElementById('usr-senha').value,
     tipo: document.getElementById('usr-tipo').value,
-    data: new Date().toISOString().split('T')[0]
+    data: new Date().toISOString().split('T')[0],
+    apis: {
+      openai_key: document.getElementById('usr-api-openai') ? document.getElementById('usr-api-openai').value.trim() : '',
+      claude_key: document.getElementById('usr-api-claude') ? document.getElementById('usr-api-claude').value.trim() : '',
+      mistral_key: document.getElementById('usr-api-mistral') ? document.getElementById('usr-api-mistral').value.trim() : '',
+      airtop_key: document.getElementById('usr-api-airtop') ? document.getElementById('usr-api-airtop').value.trim() : ''
+    }
   };
   USUARIOS_SISTEMA.push(novo);
   try { localStorage.setItem('licitapro_usuarios', JSON.stringify(USUARIOS_SISTEMA)); } catch(e){}
