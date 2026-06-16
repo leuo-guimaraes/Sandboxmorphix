@@ -33,11 +33,16 @@ try {
   else localStorage.setItem('licitapro_usuarios', JSON.stringify(USUARIOS_SISTEMA));
 } catch(e){}
 
-let userLogado = USUARIOS_SISTEMA[0];
+let userLogado = null;
+try {
+  const savedUser = localStorage.getItem('licitapro_user_logado');
+  if (savedUser) userLogado = JSON.parse(savedUser);
+} catch(e) {}
 
+const initialEmail = userLogado ? userLogado.email : '—';
 document.querySelector('.sidebar-footer').innerHTML = `
   <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;font-weight:600;color:var(--gray-700)">
-    <i class="ti ti-user-circle" style="font-size:1.2rem;color:var(--primary)"></i> <span id="sb-user-email" style="font-size:0.75rem;overflow:hidden;text-overflow:ellipsis">${userLogado.email}</span>
+    <i class="ti ti-user-circle" style="font-size:1.2rem;color:var(--primary)"></i> <span id="sb-user-email" style="font-size:0.75rem;overflow:hidden;text-overflow:ellipsis">${initialEmail}</span>
   </div>
   <button class="btn btn-sm btn-outline" style="width:100%;justify-content:center" onclick="doLogout()"><i class="ti ti-logout"></i> Sair da Conta</button>
 `;
@@ -1333,6 +1338,7 @@ window.handleLogin = async function(e) {
   const enc = USUARIOS_SISTEMA.find(u => u.email.toLowerCase() === email.toLowerCase() && u.senha === pass);
   if (enc) {
     userLogado = enc;
+    try { localStorage.setItem('licitapro_user_logado', JSON.stringify(enc)); } catch(e){}
     currentUser = { email: enc.email };
     const sbEmail = document.getElementById('sb-user-email');
     if(sbEmail) sbEmail.textContent = enc.email;
@@ -1349,6 +1355,7 @@ window.handleLogin = async function(e) {
     const data = await dbLogin(email, pass);
     currentUser = { email: email };
     userLogado = { id: data.user.id, nome: email.split('@')[0], email: email, tipo: 'usuario' };
+    try { localStorage.setItem('licitapro_user_logado', JSON.stringify(userLogado)); } catch(e){}
     const sbEmail = document.getElementById('sb-user-email');
     if(sbEmail) sbEmail.textContent = email;
     document.getElementById('splash-screen').classList.remove('hidden');
@@ -1447,6 +1454,7 @@ window.doLogout = async function() {
   document.getElementById('splash-screen').classList.remove('hidden');
   try { await dbLogout(); } catch(e){}
   userLogado = null;
+  try { localStorage.removeItem('licitapro_user_logado'); } catch(e){}
   showAuth();
   document.getElementById('splash-screen').classList.add('hidden');
 };
@@ -1569,6 +1577,7 @@ window.alternarUserLogado = function(id) {
   const enc = USUARIOS_SISTEMA.find(u => u.id === id);
   if(enc) {
     userLogado = enc;
+    try { localStorage.setItem('licitapro_user_logado', JSON.stringify(enc)); } catch(e){}
     const sbEmail = document.getElementById('sb-user-email');
     if(sbEmail) sbEmail.innerText = enc.email;
     atualizarPermissoesSidebar();
