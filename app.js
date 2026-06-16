@@ -1129,6 +1129,21 @@ window.drop = async function(ev, novaColuna) {
 };
 
 // ===== AUTH UI & INIT =====
+window.togglePasswordVisibility = function(inputId, btnEl) {
+  const input = document.getElementById(inputId);
+  const button = btnEl || (typeof event !== 'undefined' && event.currentTarget) || (input && input.nextElementSibling);
+  const icon = button ? button.querySelector('i') : null;
+  if (input && icon) {
+    if (input.type === 'password') {
+      input.type = 'text';
+      icon.className = 'ti ti-eye-off';
+    } else {
+      input.type = 'password';
+      icon.className = 'ti ti-eye';
+    }
+  }
+};
+
 function showAuth() {
   const root = $('#auth-root');
   root.style.display = 'block';
@@ -1166,11 +1181,20 @@ function renderLoginForm() {
             <label>Senha</label>
             <div class="input-icon-wrap">
               <i class="ti ti-lock"></i>
-              <input type="password" id="auth-pass" required placeholder="••••••••">
+              <input type="password" id="auth-pass" class="password-input" required placeholder="••••••••">
+              <button type="button" class="password-toggle" onclick="togglePasswordVisibility('auth-pass', this)" tabindex="-1">
+                <i class="ti ti-eye"></i>
+              </button>
+            </div>
+            <div style="text-align: right; margin-top: 6px;">
+              <a onclick="renderResetPasswordRequestForm()" style="font-size: 0.75rem; color: var(--primary); cursor: pointer; font-weight: 600;">Esqueceu sua senha?</a>
             </div>
           </div>
           <button type="submit" class="auth-btn" id="btn-login">Entrar</button>
         </form>
+        <div class="auth-links">
+          Ainda não tem conta? <a onclick="renderRegisterForm()">Cadastre-se</a>
+        </div>
       </div>
     </div>
   `;
@@ -1198,14 +1222,79 @@ function renderRegisterForm() {
             <label>Senha</label>
             <div class="input-icon-wrap">
               <i class="ti ti-lock"></i>
-              <input type="password" id="auth-pass" required placeholder="Mínimo 6 caracteres">
+              <input type="password" id="auth-pass" class="password-input" required placeholder="Mínimo 6 caracteres">
+              <button type="button" class="password-toggle" onclick="togglePasswordVisibility('auth-pass', this)" tabindex="-1">
+                <i class="ti ti-eye"></i>
+              </button>
             </div>
           </div>
-          <button type="submit" class="auth-btn" id="btn-login">Registrar</button>
+          <button type="submit" class="auth-btn" id="btn-register">Registrar</button>
         </form>
         <div class="auth-links">
           Já tem uma conta? <a onclick="renderLoginForm()">Voltar ao Login</a>
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderResetPasswordRequestForm() {
+  $('#auth-root').innerHTML = `
+    <div class="auth-container">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <i class="ti ti-key"></i>
+          <h2>Recuperar Senha</h2>
+          <p>Digite seu e-mail para receber o link de redefinição</p>
+        </div>
+        <form class="auth-form" onsubmit="handleResetPasswordRequest(event)">
+          <div id="auth-error" style="color:var(--danger);font-size:0.8rem;margin-bottom:10px;text-align:center"></div>
+          <div id="auth-success" style="color:var(--success);font-size:0.8rem;margin-bottom:10px;text-align:center"></div>
+          <div class="form-group">
+            <label>E-mail</label>
+            <div class="input-icon-wrap">
+              <i class="ti ti-mail"></i>
+              <input type="email" id="reset-email" required placeholder="seu@email.com">
+            </div>
+          </div>
+          <button type="submit" class="auth-btn" id="btn-reset-req">Enviar Link</button>
+        </form>
+        <div class="auth-links">
+          <a onclick="renderLoginForm()">Voltar ao Login</a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderResetPasswordConfirmForm() {
+  $('#auth-root').style.display = 'block';
+  $('.sidebar').style.display = 'none';
+  $('.main').style.display = 'none';
+
+  $('#auth-root').innerHTML = `
+    <div class="auth-container">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <i class="ti ti-shield-lock"></i>
+          <h2>Nova Senha</h2>
+          <p>Crie uma nova senha forte para sua conta</p>
+        </div>
+        <form class="auth-form" onsubmit="handleResetPasswordConfirm(event)">
+          <div id="auth-error" style="color:var(--danger);font-size:0.8rem;margin-bottom:10px;text-align:center"></div>
+          <div id="auth-success" style="color:var(--success);font-size:0.8rem;margin-bottom:10px;text-align:center"></div>
+          <div class="form-group">
+            <label>Nova Senha</label>
+            <div class="input-icon-wrap">
+              <i class="ti ti-lock"></i>
+              <input type="password" id="confirm-pass" class="password-input" required placeholder="Nova senha (min. 6 carac.)">
+              <button type="button" class="password-toggle" onclick="togglePasswordVisibility('confirm-pass', this)" tabindex="-1">
+                <i class="ti ti-eye"></i>
+              </button>
+            </div>
+          </div>
+          <button type="submit" class="auth-btn" id="btn-reset-conf">Atualizar Senha</button>
+        </form>
       </div>
     </div>
   `;
@@ -1259,6 +1348,9 @@ window.handleLogin = async function(e) {
   try {
     const data = await dbLogin(email, pass);
     currentUser = { email: email };
+    userLogado = { id: data.user.id, nome: email.split('@')[0], email: email, tipo: 'usuario' };
+    const sbEmail = document.getElementById('sb-user-email');
+    if(sbEmail) sbEmail.textContent = email;
     document.getElementById('splash-screen').classList.remove('hidden');
     await loadSupabaseData();
     hideAuth();
@@ -1273,12 +1365,88 @@ window.handleLogin = async function(e) {
 
 window.handleRegister = async function(e) {
   e.preventDefault();
+  const email = document.getElementById('auth-email').value.trim();
+  const pass = document.getElementById('auth-pass').value.trim();
+  const btn = document.getElementById('btn-register');
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Registrando...';
+
+  try {
+    await dbSignUp(email, pass);
+    alert('Cadastro realizado com sucesso! Verifique seu e-mail para confirmação se necessário.');
+    renderLoginForm();
+  } catch(err) {
+    document.getElementById('auth-error').textContent = 'Erro ao cadastrar: ' + err.message;
+    btn.disabled = false; btn.innerHTML = 'Registrar';
+  }
+};
+
+window.handleResetPasswordRequest = async function(e) {
+  e.preventDefault();
+  const email = document.getElementById('reset-email').value.trim();
+  const btn = document.getElementById('btn-reset-req');
+  const errDiv = document.getElementById('auth-error');
+  const succDiv = document.getElementById('auth-success');
+  
+  errDiv.textContent = '';
+  succDiv.textContent = '';
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Enviando...';
+  
+  try {
+    await dbResetPasswordEmail(email);
+    succDiv.textContent = 'E-mail de recuperação enviado com sucesso! Verifique sua caixa de entrada.';
+    btn.innerHTML = 'Enviar Link';
+    btn.disabled = false;
+  } catch(err) {
+    errDiv.textContent = 'Erro ao enviar e-mail: ' + err.message;
+    btn.innerHTML = 'Enviar Link';
+    btn.disabled = false;
+  }
+};
+
+window.handleResetPasswordConfirm = async function(e) {
+  e.preventDefault();
+  const pass = document.getElementById('confirm-pass').value.trim();
+  const btn = document.getElementById('btn-reset-conf');
+  const errDiv = document.getElementById('auth-error');
+  const succDiv = document.getElementById('auth-success');
+  
+  errDiv.textContent = '';
+  succDiv.textContent = '';
+  
+  if (pass.length < 6) {
+    errDiv.textContent = 'A senha deve ter no mínimo 6 caracteres.';
+    return;
+  }
+  
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Atualizando...';
+  
+  try {
+    await dbUpdatePassword(pass);
+    succDiv.textContent = 'Senha atualizada com sucesso! Redirecionando para o login...';
+    
+    if (history.pushState) {
+      history.pushState("", document.title, window.location.pathname + window.location.search);
+    } else {
+      window.location.hash = "";
+    }
+    
+    setTimeout(() => {
+      renderLoginForm();
+    }, 2000);
+  } catch(err) {
+    errDiv.textContent = 'Erro ao atualizar senha: ' + err.message;
+    btn.innerHTML = 'Atualizar Senha';
+    btn.disabled = false;
+  }
 };
 
 window.doLogout = async function() {
   if (!confirm("Tem certeza que deseja sair?")) return;
   document.getElementById('splash-screen').classList.remove('hidden');
   try { await dbLogout(); } catch(e){}
+  userLogado = null;
   showAuth();
   document.getElementById('splash-screen').classList.add('hidden');
 };
@@ -1295,6 +1463,37 @@ async function loadSupabaseData() {
 
 async function checkAuthAndInit() {
   const splash = document.getElementById('splash-screen');
+  
+  // Interceptar fluxo de recuperação de senha do Supabase
+  const hash = window.location.hash;
+  const isRecovery = hash.includes('type=recovery') || (hash.includes('access_token=') && hash.includes('type=recovery'));
+  if (isRecovery) {
+    splash.classList.add('hidden');
+    renderResetPasswordConfirmForm();
+    return;
+  }
+  
+  // Tentar obter sessão ativa do Supabase
+  if (typeof dbGetCurrentUser === 'function') {
+    try {
+      const sbUser = await dbGetCurrentUser();
+      if (sbUser) {
+        userLogado = { id: sbUser.id, nome: sbUser.email.split('@')[0], email: sbUser.email, tipo: 'usuario' };
+        currentUser = { email: sbUser.email };
+        const sbEmail = document.getElementById('sb-user-email');
+        if(sbEmail) sbEmail.textContent = sbUser.email;
+        await loadSupabaseData();
+        hideAuth();
+        atualizarPermissoesSidebar();
+        splash.classList.add('hidden');
+        render();
+        return;
+      }
+    } catch(e) {
+      console.warn("Erro ao obter sessão do Supabase:", e);
+    }
+  }
+
   try {
     if (userLogado) {
       currentUser = { email: userLogado.email };

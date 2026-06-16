@@ -58,6 +58,22 @@ async function dbGetCurrentUser() {
   return session.user;
 }
 
+async function dbResetPasswordEmail(email) {
+  if (!supabaseClient) throw new Error("Supabase não inicializado");
+  const { data, error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function dbUpdatePassword(newPassword) {
+  if (!supabaseClient) throw new Error("Supabase não inicializado");
+  const { data, error } = await supabaseClient.auth.updateUser({ password: newPassword });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
 // ===== GENERIC CRUD & FALLBACK STORAGE =====
 function getLocalFallback(table) {
   try {
