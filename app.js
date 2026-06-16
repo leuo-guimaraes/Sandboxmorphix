@@ -1197,9 +1197,6 @@ function renderLoginForm() {
           </div>
           <button type="submit" class="auth-btn" id="btn-login">Entrar</button>
         </form>
-        <div class="auth-links">
-          Ainda não tem conta? <a onclick="renderRegisterForm()">Cadastre-se</a>
-        </div>
       </div>
     </div>
   `;
