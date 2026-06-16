@@ -469,7 +469,7 @@ function renderConfigIA(){
       <div class="form-group">
         <label>Modelo</label>
         <select id="cfg-openai-model">
-          ${['gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'].map(m=>`<option ${cfg.openai_model===m?'selected':''}>${m}</option>`).join('')}
+          ${['gpt-5.1','gpt-4o','gpt-4o-mini','gpt-4-turbo','gpt-3.5-turbo'].map(m=>`<option ${cfg.openai_model===m?'selected':''}>${m}</option>`).join('')}
         </select>
       </div>
       <button class="btn btn-sm btn-outline" onclick="testAIConnection('openai')"><i class="ti ti-plug"></i> Testar Conexão</button>
