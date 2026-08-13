@@ -1311,17 +1311,7 @@ window.saveAuthSupabaseConfig = function() {
 function atualizarPermissoesSidebar() {
   const itemUsuarios = document.querySelector('.nav-item[data-page="usuarios"]');
   if (itemUsuarios) {
-    if (userLogado && userLogado.tipo === 'admin') {
-      itemUsuarios.style.display = 'flex';
-    } else {
-      itemUsuarios.style.display = 'none';
-      if (currentPage === 'usuarios') {
-        currentPage = 'dashboard';
-        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-        const itemDash = document.querySelector('.nav-item[data-page="dashboard"]');
-        if(itemDash) itemDash.classList.add('active');
-      }
-    }
+    itemUsuarios.style.display = 'flex';
   }
 }
 
@@ -1520,55 +1510,279 @@ async function checkAuthAndInit() {
 }
 
 // ===== GESTÃO DE USUÁRIOS =====
-function renderUsuarios() {
-  const isAdmin = userLogado.tipo === 'admin';
+window.activeUsuariosSubTab = 'lista';
+
+function renderUsuarios(subTab) {
+  if (subTab) window.activeUsuariosSubTab = subTab;
+  const currentTab = window.activeUsuariosSubTab || 'lista';
+  const isAdmin = userLogado && userLogado.tipo === 'admin';
+  const totalUsers = USUARIOS_SISTEMA.length;
+  const adminCount = USUARIOS_SISTEMA.filter(u => u.tipo === 'admin').length;
+  const userCount = totalUsers - adminCount;
+
+  let contentHtml = '';
+
+  if (currentTab === 'lista') {
+    contentHtml = `
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom:20px;">
+        <div class="card" style="padding:16px; display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; border-radius:8px; background:rgba(59,130,246,0.1); color:var(--primary); display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+            <i class="ti ti-users"></i>
+          </div>
+          <div>
+            <span style="font-size:0.75rem; color:var(--gray-500); display:block;">Total de Usuários</span>
+            <strong style="font-size:1.3rem; color:var(--gray-900);">${totalUsers}</strong>
+          </div>
+        </div>
+        <div class="card" style="padding:16px; display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; border-radius:8px; background:rgba(16,185,129,0.1); color:var(--success); display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+            <i class="ti ti-shield-check"></i>
+          </div>
+          <div>
+            <span style="font-size:0.75rem; color:var(--gray-500); display:block;">Administradores</span>
+            <strong style="font-size:1.3rem; color:var(--gray-900);">${adminCount}</strong>
+          </div>
+        </div>
+        <div class="card" style="padding:16px; display:flex; align-items:center; gap:12px;">
+          <div style="width:42px; height:42px; border-radius:8px; background:rgba(99,102,241,0.1); color:#6366f1; display:flex; align-items:center; justify-content:center; font-size:1.4rem;">
+            <i class="ti ti-user"></i>
+          </div>
+          <div>
+            <span style="font-size:0.75rem; color:var(--gray-500); display:block;">Usuários Comuns</span>
+            <strong style="font-size:1.3rem; color:var(--gray-900);">${userCount}</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px;background:var(--gray-50);padding:14px 16px;border-radius:8px;border:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+        <div>
+          <span style="font-size:0.8rem;color:var(--gray-500);display:block;">Sessão Atual:</span>
+          <strong style="font-size:1.05rem;color:var(--gray-800);">${userLogado ? userLogado.nome : 'Usuário'}</strong> (${userLogado ? userLogado.email : ''})
+          <span class="chip ${userLogado && userLogado.tipo === 'admin' ? 'chip-green' : 'chip-blue'}" style="margin-left:6px;">${userLogado && userLogado.tipo === 'admin' ? 'Administrador (Acesso Total)' : 'Usuário Comum'}</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span style="font-size:0.8rem;color:var(--gray-600)">Simular Alternância de Perfil:</span>
+          <select class="btn btn-sm btn-outline" onchange="alternarUserLogado(this.value)" style="background:white;cursor:pointer;">
+            ${USUARIOS_SISTEMA.map(u => `<option value="${u.id}" ${userLogado && u.id === userLogado.id ? 'selected' : ''}>${u.nome} (${u.tipo})</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+          <div class="input-icon-wrap" style="max-width:320px; flex:1;">
+            <i class="ti ti-search"></i>
+            <input type="text" id="usr-search-input" placeholder="Buscar usuário por nome ou email..." onkeyup="filtrarTabelaUsuarios(this.value)">
+          </div>
+          <button class="btn btn-primary" onclick="renderUsuarios('criar')">
+            <i class="ti ti-user-plus"></i> Criar Novo Usuário
+          </button>
+        </div>
+
+        <table id="tabela-usuarios-lista">
+          <thead>
+            <tr>
+              <th>Nome / Usuário</th>
+              <th>E-mail</th>
+              <th>Permissão</th>
+              <th>Data Cadastro</th>
+              <th style="text-align:right">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${USUARIOS_SISTEMA.map(u => `
+            <tr>
+              <td style="font-weight:600">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <div style="width:34px; height:34px; border-radius:50%; background:var(--gray-100); display:flex; align-items:center; justify-content:center; color:var(--primary); font-weight:700;">
+                    ${u.nome ? u.nome.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                  <div>
+                    <div>${u.nome}</div>
+                    ${userLogado && u.id === userLogado.id ? '<span style="font-size:0.7rem; color:var(--primary); font-weight:500;">(Conta atual)</span>' : ''}
+                  </div>
+                </div>
+              </td>
+              <td>${u.email}</td>
+              <td><span class="chip ${u.tipo === 'admin' ? 'chip-green' : 'chip-blue'}">${u.tipo === 'admin' ? 'Administrador' : 'Usuário Comum'}</span></td>
+              <td>${u.data ? fmtDate(u.data) : '14/05/2026'}</td>
+              <td style="text-align:right">
+                ${userLogado && u.id !== userLogado.id ? `<button class="btn btn-sm btn-outline" style="color:var(--danger); padding:4px 8px;" onclick="excluirUsuario('${u.id}')" title="Excluir Usuário"><i class="ti ti-trash"></i> Excluir</button>` : `<span style="font-size:0.75rem; color:var(--gray-400);">Logado</span>`}
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } else if (currentTab === 'criar') {
+    contentHtml = `
+      <div class="card" style="max-width:800px; margin:0 auto; padding:24px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; border-bottom:1px solid var(--gray-200); padding-bottom:12px;">
+          <div>
+            <h2 style="margin:0; color:var(--gray-900); font-size:1.2rem; display:flex; align-items:center; gap:8px;">
+              <i class="ti ti-user-plus" style="color:var(--primary)"></i> Cadastrar Novo Usuário
+            </h2>
+            <p style="margin:4px 0 0 0; color:var(--gray-500); font-size:0.85rem;">Preencha o formulário para criar um novo usuário no sistema</p>
+          </div>
+          <button class="btn btn-sm btn-outline" onclick="renderUsuarios('lista')">
+            <i class="ti ti-arrow-left"></i> Voltar à Lista
+          </button>
+        </div>
+
+        <form onsubmit="salvarUsuarioForm(event)">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div class="form-group">
+              <label style="font-weight:600;">Nome Completo <span style="color:var(--danger)">*</span></label>
+              <div class="input-icon-wrap">
+                <i class="ti ti-user"></i>
+                <input id="usr-nome-input" required placeholder="Ex: Carlos Eduardo Silva">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label style="font-weight:600;">E-mail Corporativo <span style="color:var(--danger)">*</span></label>
+              <div class="input-icon-wrap">
+                <i class="ti ti-mail"></i>
+                <input id="usr-email-input" type="email" required placeholder="carlos@empresa.com.br">
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+            <div class="form-group">
+              <label style="font-weight:600;">Senha de Acesso <span style="color:var(--danger)">*</span></label>
+              <div class="input-icon-wrap">
+                <i class="ti ti-lock"></i>
+                <input id="usr-senha-input" type="password" class="password-input" required placeholder="Mínimo 6 caracteres">
+                <button type="button" class="password-toggle" onclick="togglePasswordVisibility('usr-senha-input', this)" tabindex="-1">
+                  <i class="ti ti-eye"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label style="font-weight:600;">Nível de Permissão <span style="color:var(--danger)">*</span></label>
+              <select id="usr-tipo-select" required style="width:100%; padding:9px; border-radius:6px; border:1px solid var(--gray-300); background:white;">
+                <option value="usuario">Usuário Comum (Acesso às operações)</option>
+                <option value="admin">Administrador (Acesso total)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-top:20px; border-top:1px solid var(--gray-200); padding-top:16px;">
+            <h3 style="font-size:0.95rem; margin-bottom:4px; color:var(--gray-800); display:flex; align-items:center; gap:6px;">
+              <i class="ti ti-key"></i> Chaves de API Vinculadas ao Usuário (Opcional)
+            </h3>
+            <p style="font-size:0.78rem; color:var(--gray-500); margin-bottom:12px;">Se cadastradas, estas chaves serão vinculadas à conta do usuário.</p>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+              <div class="form-group">
+                <label style="font-size:0.8rem;">OpenAI API Key</label>
+                <input id="usr-api-openai-input" type="password" placeholder="sk-...">
+              </div>
+              <div class="form-group">
+                <label style="font-size:0.8rem;">Claude API Key</label>
+                <input id="usr-api-claude-input" type="password" placeholder="sk-ant-...">
+              </div>
+              <div class="form-group">
+                <label style="font-size:0.8rem;">Mistral API Key</label>
+                <input id="usr-api-mistral-input" type="password" placeholder="...">
+              </div>
+              <div class="form-group">
+                <label style="font-size:0.8rem;">Airtop API Key</label>
+                <input id="usr-api-airtop-input" type="password" placeholder="sk-...">
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions" style="margin-top:24px; display:flex; justify-content:flex-end; gap:10px;">
+            <button type="button" class="btn btn-outline" onclick="renderUsuarios('lista')">Cancelar</button>
+            <button type="submit" class="btn btn-primary" id="btn-salvar-usr">
+              <i class="ti ti-check"></i> Cadastrar Usuário
+            </button>
+          </div>
+        </form>
+      </div>
+    `;
+  }
+
   app.innerHTML = `
-  <div class="page-header">
-    <div>
-      <h1>Gestão de Usuários</h1>
-      <p>Gerencie o acesso da sua equipe à plataforma Morphix</p>
+    <div class="page-header">
+      <div>
+        <h1>Gestão de Usuários</h1>
+        <p>Gerencie a equipe e acesse a aba de criação de novos usuários</p>
+      </div>
+      <button class="btn ${currentTab === 'criar' ? 'btn-outline' : 'btn-primary'}" onclick="renderUsuarios('${currentTab === 'criar' ? 'lista' : 'criar'}')">
+        <i class="ti ti-${currentTab === 'criar' ? 'list' : 'user-plus'}"></i> ${currentTab === 'criar' ? 'Ver Lista de Usuários' : 'Criar Novo Usuário'}
+      </button>
     </div>
-    ${isAdmin ? `<button class="btn btn-primary" onclick="openNovoUsuario()"><i class="ti ti-user-plus"></i> Novo Usuário</button>` : `<span class="chip chip-red" style="font-size:0.85rem;"><i class="ti ti-lock"></i> Criação restrita a Administradores</span>`}
-  </div>
-  <div class="card" style="margin-bottom:16px;background:var(--gray-50);padding:16px;border-radius:8px;border:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-    <div>
-      <span style="font-size:0.8rem;color:var(--gray-500);display:block;">Sua Sessão Atual:</span>
-      <strong style="font-size:1.1rem;color:var(--gray-800);">${userLogado.nome}</strong> (${userLogado.email})
-      <span class="chip ${userLogado.tipo === 'admin' ? 'chip-green' : 'chip-blue'}" style="margin-left:6px;">${userLogado.tipo === 'admin' ? 'Administrador (Acesso Total)' : 'Usuário Padrão'}</span>
+
+    <!-- ABAS NAVEGÁVEIS -->
+    <div class="provider-tabs" style="max-width:400px; margin-bottom:20px;">
+      <div class="provider-tab ${currentTab === 'lista' ? 'active' : ''}" onclick="renderUsuarios('lista')">
+        <i class="ti ti-users"></i> Lista de Usuários (${totalUsers})
+      </div>
+      <div class="provider-tab ${currentTab === 'criar' ? 'active' : ''}" onclick="renderUsuarios('criar')">
+        <i class="ti ti-user-plus"></i> Criar Usuário
+      </div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <span style="font-size:0.8rem;color:var(--gray-600)">Simular Alternância de Perfil:</span>
-      <select class="btn btn-sm btn-outline" onchange="alternarUserLogado(this.value)" style="background:white;cursor:pointer;">
-        ${USUARIOS_SISTEMA.map(u => `<option value="${u.id}" ${u.id === userLogado.id ? 'selected' : ''}>${u.nome} (${u.tipo})</option>`).join('')}
-      </select>
-    </div>
-  </div>
-  <div class="card">
-    <table>
-      <thead>
-        <tr>
-          <th>Nome</th>
-          <th>E-mail</th>
-          <th>Permissão</th>
-          <th>Criado em</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${USUARIOS_SISTEMA.map(u => `
-        <tr>
-          <td style="font-weight:600"><div style="display:flex;align-items:center;gap:8px;"><i class="ti ti-user-circle" style="font-size:1.4rem;color:var(--primary);"></i> ${u.nome}</div></td>
-          <td>${u.email}</td>
-          <td><span class="chip ${u.tipo === 'admin' ? 'chip-green' : 'chip-blue'}">${u.tipo === 'admin' ? 'Administrador' : 'Usuário Comum'}</span></td>
-          <td>${u.data ? fmtDate(u.data) : '14/05/2026'}</td>
-          <td>
-            ${isAdmin && u.id !== userLogado.id ? `<button class="btn btn-sm btn-outline" style="color:var(--danger)" onclick="excluirUsuario('${u.id}')" title="Excluir Usuário"><i class="ti ti-trash"></i></button>` : `<span style="font-size:0.75rem;color:var(--gray-400);">${u.id === userLogado.id ? 'Você' : 'Bloqueado'}</span>`}
-          </td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
-  </div>`;
+
+    ${contentHtml}
+  `;
 }
+
+window.filtrarTabelaUsuarios = function(query) {
+  const filter = query.toLowerCase();
+  const rows = document.querySelectorAll('#tabela-usuarios-lista tbody tr');
+  rows.forEach(row => {
+    const text = row.innerText.toLowerCase();
+    row.style.display = text.includes(filter) ? '' : 'none';
+  });
+};
+
+window.salvarUsuarioForm = async function(ev) {
+  ev.preventDefault();
+  const btn = document.getElementById('btn-salvar-usr');
+  
+  const nome = document.getElementById('usr-nome-input').value.trim();
+  const email = document.getElementById('usr-email-input').value.trim();
+  const senha = document.getElementById('usr-senha-input').value.trim();
+  const tipo = document.getElementById('usr-tipo-select').value;
+  
+  if (!nome || !email || !senha) return;
+  
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader" style="animation:spin 1s linear infinite"></i> Cadastrando...'; }
+  
+  const novo = {
+    id: Date.now().toString(),
+    nome: nome,
+    email: email,
+    senha: senha,
+    tipo: tipo,
+    data: new Date().toISOString().split('T')[0],
+    apis: {
+      openai_key: document.getElementById('usr-api-openai-input') ? document.getElementById('usr-api-openai-input').value.trim() : '',
+      claude_key: document.getElementById('usr-api-claude-input') ? document.getElementById('usr-api-claude-input').value.trim() : '',
+      mistral_key: document.getElementById('usr-api-mistral-input') ? document.getElementById('usr-api-mistral-input').value.trim() : '',
+      airtop_key: document.getElementById('usr-api-airtop-input') ? document.getElementById('usr-api-airtop-input').value.trim() : ''
+    }
+  };
+
+  // Se o Supabase estiver conectado, cria também no Supabase Auth
+  try {
+    if (typeof dbSignUp === 'function') {
+      await dbSignUp(email, senha);
+    }
+  } catch (err) {
+    console.warn("Aviso ao registrar no Supabase Auth:", err.message);
+  }
+
+  USUARIOS_SISTEMA.unshift(novo);
+  try { localStorage.setItem('licitapro_usuarios', JSON.stringify(USUARIOS_SISTEMA)); } catch(e){}
+
+  alert('✅ Usuário "' + nome + '" cadastrado com sucesso!');
+  renderUsuarios('lista');
+};
 
 window.alternarUserLogado = function(id) {
   const enc = USUARIOS_SISTEMA.find(u => u.id === id);
@@ -1578,96 +1792,23 @@ window.alternarUserLogado = function(id) {
     const sbEmail = document.getElementById('sb-user-email');
     if(sbEmail) sbEmail.innerText = enc.email;
     atualizarPermissoesSidebar();
-    if (currentPage === 'usuarios' && userLogado.tipo !== 'admin') {
-      render();
-    } else if (currentPage === 'usuarios') {
-      renderUsuarios();
-    } else {
-      render();
-    }
+    renderUsuarios();
   }
 };
 
 window.openNovoUsuario = function() {
-  if(userLogado.tipo !== 'admin') {
-    alert("Acesso Negado: Apenas Administradores podem criar novos usuários.");
-    return;
-  }
-  openModal(`<div class="modal-header"><h2><i class="ti ti-user-plus" style="color:var(--primary)"></i> Novo Usuário</h2><button class="modal-close" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
-  <form onsubmit="salvarUsuario(event)">
-    <div class="form-group">
-      <label>Nome Completo</label>
-      <input id="usr-nome" required placeholder="Ex: Carlos Silva">
-    </div>
-    <div class="form-group">
-      <label>E-mail Corporativo</label>
-      <input id="usr-email" type="email" required placeholder="carlos@morphix.com.br">
-    </div>
-    <div class="form-group">
-      <label>Senha Provisória</label>
-      <input id="usr-senha" type="password" required placeholder="••••••••">
-    </div>
-    <div class="form-group">
-      <label>Nível de Permissão</label>
-      <select id="usr-tipo" required>
-        <option value="usuario">Usuário Comum (Não cria novos usuários)</option>
-        <option value="admin">Administrador (Acesso Total)</option>
-      </select>
-    </div>
-    <div class="section-title" style="margin-top:16px; border-bottom:1px solid var(--gray-200); padding-bottom:8px;"><i class="ti ti-api-app"></i> APIs Vinculadas (Opcional)</div>
-    <p style="font-size:0.75rem; color:var(--gray-500); margin-bottom:12px;">As chaves preenchidas aqui ficarão vinculadas a este usuário em qualquer dispositivo que ele acessar.</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="form-group">
-        <label style="font-size:0.8rem;">OpenAI API Key</label>
-        <input id="usr-api-openai" type="password" placeholder="sk-...">
-      </div>
-      <div class="form-group">
-        <label style="font-size:0.8rem;">Claude API Key</label>
-        <input id="usr-api-claude" type="password" placeholder="sk-ant-...">
-      </div>
-      <div class="form-group">
-        <label style="font-size:0.8rem;">Mistral API Key</label>
-        <input id="usr-api-mistral" type="password" placeholder="...">
-      </div>
-      <div class="form-group">
-        <label style="font-size:0.8rem;">Airtop API Key</label>
-        <input id="usr-api-airtop" type="password" placeholder="sk-...">
-      </div>
-    </div>
-    <div class="form-actions">
-      <button type="button" class="btn btn-outline" onclick="closeModal()">Cancelar</button>
-      <button type="submit" class="btn btn-primary"><i class="ti ti-check"></i> Cadastrar Usuário</button>
-    </div>
-  </form>`);
+  renderUsuarios('criar');
 };
 
 window.salvarUsuario = function(ev) {
-  ev.preventDefault();
-  const novo = {
-    id: Date.now().toString(),
-    nome: document.getElementById('usr-nome').value,
-    email: document.getElementById('usr-email').value,
-    senha: document.getElementById('usr-senha').value,
-    tipo: document.getElementById('usr-tipo').value,
-    data: new Date().toISOString().split('T')[0],
-    apis: {
-      openai_key: document.getElementById('usr-api-openai') ? document.getElementById('usr-api-openai').value.trim() : '',
-      claude_key: document.getElementById('usr-api-claude') ? document.getElementById('usr-api-claude').value.trim() : '',
-      mistral_key: document.getElementById('usr-api-mistral') ? document.getElementById('usr-api-mistral').value.trim() : '',
-      airtop_key: document.getElementById('usr-api-airtop') ? document.getElementById('usr-api-airtop').value.trim() : ''
-    }
-  };
-  USUARIOS_SISTEMA.push(novo);
-  try { localStorage.setItem('licitapro_usuarios', JSON.stringify(USUARIOS_SISTEMA)); } catch(e){}
-  closeModal();
-  renderUsuarios();
+  salvarUsuarioForm(ev);
 };
 
 window.excluirUsuario = function(id) {
   if(!confirm("Tem certeza que deseja excluir este usuário da plataforma?")) return;
   USUARIOS_SISTEMA = USUARIOS_SISTEMA.filter(u => u.id !== id);
   try { localStorage.setItem('licitapro_usuarios', JSON.stringify(USUARIOS_SISTEMA)); } catch(e){}
-  renderUsuarios();
+  renderUsuarios('lista');
 };
 
 // Initialize application
