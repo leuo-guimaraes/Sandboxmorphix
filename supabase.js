@@ -1,21 +1,32 @@
 // ===== SUPABASE CLIENT & AUTH =====
 const SUPABASE_CONFIG_KEY = 'licitapro_supabase';
 
-function getSupabaseConfig() {
-  try {
-    const saved = localStorage.getItem(SUPABASE_CONFIG_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.url && parsed.key) return parsed;
-    }
-  } catch(e){}
+const SB_DEFAULTS = {
+  url: 'https://inisdgymwfmcdktsjjuk.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImluaXNkZ3ltd2ZtY2RrdHNqanVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY1ODEwOTMsImV4cCI6MjEwMjE1NzA5M30.6L_2Klw3Z3CdCyGpU8XPRdUKtegH8_NISb94MQmoaDk'
+};
 
-  if (typeof window !== 'undefined' && window.CONFIG && window.CONFIG.SUPABASE_URL) {
+function getSupabaseConfig() {
+  if (typeof window !== 'undefined' && window.CONFIG && window.CONFIG.SUPABASE_URL && window.CONFIG.SUPABASE_KEY) {
     return {
       url: window.CONFIG.SUPABASE_URL,
       key: window.CONFIG.SUPABASE_KEY
     };
   }
+
+  try {
+    const saved = localStorage.getItem(SUPABASE_CONFIG_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // Se for a URL antiga inacessível, limpa do localStorage automaticamente
+      if (parsed.url && parsed.url.includes('afbwkmdsqefyijlxhhur')) {
+        localStorage.removeItem(SUPABASE_CONFIG_KEY);
+      } else if (parsed.url && parsed.key) {
+        return parsed;
+      }
+    }
+  } catch(e){}
+
   return SB_DEFAULTS;
 }
 
@@ -29,12 +40,6 @@ function saveSupabaseConfig(cfg) {
   }
 }
 
-// Default config (substituído dinamicamente pelo config.js local)
-const SB_DEFAULTS = {
-  url: '',
-  key: ''
-};
-
 let supabaseClient = null;
 
 function initSupabase() {
@@ -43,13 +48,22 @@ function initSupabase() {
   const key = cfg.key || SB_DEFAULTS.key;
   
   if (typeof supabase !== 'undefined' && url && key) {
-    supabaseClient = supabase.createClient(url, key);
+    try {
+      supabaseClient = supabase.createClient(url, key);
+      console.log('✅ Supabase Client inicializado com sucesso:', url);
+    } catch(e) {
+      console.error('Erro ao criar cliente Supabase:', e);
+    }
   } else {
     console.warn("Supabase SDK não carregado ou credenciais ausentes.");
   }
 }
-// Inicializa o cliente na inicialização
+
+// Inicializa o cliente na carga do script e no DOMContentLoaded
 initSupabase();
+if (typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', initSupabase);
+}
 
 // ===== AUTHENTICATION =====
 async function dbLogin(email, password) {
