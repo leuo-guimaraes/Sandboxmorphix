@@ -2,16 +2,37 @@
 const SUPABASE_CONFIG_KEY = 'licitapro_supabase';
 
 function getSupabaseConfig() {
+  try {
+    const saved = localStorage.getItem(SUPABASE_CONFIG_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.url && parsed.key) return parsed;
+    }
+  } catch(e){}
+
+  if (typeof window !== 'undefined' && window.CONFIG && window.CONFIG.SUPABASE_URL) {
+    return {
+      url: window.CONFIG.SUPABASE_URL,
+      key: window.CONFIG.SUPABASE_KEY
+    };
+  }
   return SB_DEFAULTS;
 }
+
 function saveSupabaseConfig(cfg) {
-  console.log('Configuração do Supabase fixa no backend.');
+  try {
+    localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify(cfg));
+    initSupabase();
+    console.log('Configurações do Supabase salvas localmente.');
+  } catch(e) {
+    console.error('Erro ao salvar configurações do Supabase:', e);
+  }
 }
 
-// Default config (will be overridden by Config IA page)
+// Default config (substituído dinamicamente pelo config.js local)
 const SB_DEFAULTS = {
-  url: 'https://afbwkmdsqefyijlxhhur.supabase.co',
-  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFmYndrbWRzcWVmeWlqbHhoaHVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NDk2NjcsImV4cCI6MjA5NDEyNTY2N30.GH3fAeNzIYN9IVqtiBwfursXXszCtMfp5ng_wEtE0SE'
+  url: '',
+  key: ''
 };
 
 let supabaseClient = null;
